@@ -92,9 +92,9 @@ describe("buildGraph — relationship edges", () => {
 });
 
 describe("buildGraph — referral edges (linked)", () => {
-  it("links a contact to its @c_xxx referrer if that contact exists", () => {
-    // Use realistic kit-shaped IDs (c_YYYYMMDD_xxxx) — parseReferralSource's
-    // regex requires the c_ prefix.
+  it("emits an edge from referrer (source) to referred contact (target)", () => {
+    // Direction matches consultant intuition: "ABC referred this client" —
+    // arrow flows FROM the referrer TO the contact they sent over.
     const g = buildGraph(
       [
         contact({ id: "c_20260525_aaaa", name: "Referrer" }),
@@ -104,8 +104,8 @@ describe("buildGraph — referral edges (linked)", () => {
     );
     const refs = g.links.filter((l) => l.edgeKind === "referral");
     expect(refs).toHaveLength(1);
-    expect(refs[0].source).toBe("c_20260525_bbbb");
-    expect(refs[0].target).toBe("c_20260525_aaaa");
+    expect(refs[0].source).toBe("c_20260525_aaaa"); // referrer
+    expect(refs[0].target).toBe("c_20260525_bbbb"); // referred contact
     expect(g.stats.ghostCount).toBe(0);
   });
 

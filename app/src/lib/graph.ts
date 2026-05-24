@@ -79,6 +79,10 @@ export function buildGraph(
   }
 
   // Referral edges + ghost nodes (derived from contact.referral_source).
+  //
+  // Direction: source = REFERRER (who sent them), target = the contact
+  // they referred. The arrow reads "ABC Immigration → Demo Beatrice Wong"
+  // ("ABC sent us this client"), which matches consultant intuition.
   let referralEdgeCount = 0;
   for (const c of contacts) {
     if (c.archived_at) continue;
@@ -87,9 +91,9 @@ export function buildGraph(
       // Only emit if the linked contact actually exists in the active set.
       if (!contactIds.has(parsed.linkedContactId)) continue;
       links.push({
-        id: `ref:${c.id}->${parsed.linkedContactId}`,
-        source: c.id,
-        target: parsed.linkedContactId,
+        id: `ref:${parsed.linkedContactId}->${c.id}`,
+        source: parsed.linkedContactId,
+        target: c.id,
         edgeKind: "referral",
       });
       referralEdgeCount += 1;
@@ -108,9 +112,9 @@ export function buildGraph(
         nodes.push(ghost);
       }
       links.push({
-        id: `ref:${c.id}->${gid}`,
-        source: c.id,
-        target: gid,
+        id: `ref:${gid}->${c.id}`,
+        source: gid,
+        target: c.id,
         edgeKind: "referral",
       });
       referralEdgeCount += 1;

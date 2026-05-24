@@ -18,41 +18,60 @@ function cssVar(name: string, alpha = 1): string {
 }
 
 function nodeColor(node: GraphNode): string {
+  // Full opacity — translucent fills let edge lines bleed through and
+  // dirty up the look. Ghosts use this as their stroke color.
   if (node.kind === "ghost") {
-    return cssVar("--fg-muted", 0.5);
+    return cssVar("--fg-muted", 0.9);
   }
   switch (node.contactType) {
     case "client":
-      return cssVar("--gold", 0.9);
+      return cssVar("--gold", 1);
     case "prospect":
-      return cssVar("--status-success", 0.85);
+      return cssVar("--status-success", 1);
     case "candidate":
-      return cssVar("--status-warning", 0.8);
+      return cssVar("--status-warning", 1);
     case "advisor":
-      return cssVar("--gold-bright", 0.9);
+      return cssVar("--gold-bright", 1);
     default:
-      return cssVar("--fg-muted", 0.7);
+      return cssVar("--fg-muted", 0.95);
   }
 }
 
+// Distinct hues per edge kind. Hard-coded HSLA (not CSS vars) because the
+// AWM palette only ships gold + clay-error + moss-success + neutrals, and
+// edges need more separation than that gives us. All colors stay inside
+// AWM-defensible territory (no cyan/violet/neon) but are deliberately more
+// saturated and at higher opacity than the brand status tokens so they
+// read clearly against both schemes' backgrounds.
 function edgeColor(link: GraphEdge): string {
   switch (link.edgeKind) {
     case "referral":
-      return cssVar("--gold", 0.55);
+      // Vivid gold — brand-signature color for "who sent who"
+      return "hsla(41, 75%, 55%, 0.92)";
     case "spouse":
     case "parent":
     case "child":
-      return cssVar("--status-error", 0.55); // clay tone in light/dark scheme
+      // Saturated clay — intimate / nuclear family
+      return "hsla(7, 60%, 52%, 0.92)";
     case "sibling":
     case "family":
-      return cssVar("--status-warning", 0.5);
+      // Moss green — extended family
+      return "hsla(85, 30%, 45%, 0.9)";
     case "friend":
-      return cssVar("--gold-bright", 0.4);
+      // Deep cognac — social, distinct from gold
+      return "hsla(20, 50%, 42%, 0.9)";
     case "business_partner":
-      return cssVar("--fg-muted", 0.45);
+      // Neutral slate — professional, lowest visual priority
+      return "hsla(215, 12%, 50%, 0.88)";
     default:
-      return cssVar("--fg-muted", 0.4);
+      return "hsla(0, 0%, 50%, 0.7)";
   }
+}
+
+/** Referral edges are the most important — render them a touch thicker
+ *  than the rest so they stand out from family/friend ties. */
+function edgeWidth(link: GraphEdge): number {
+  return link.edgeKind === "referral" ? 3 : 2.5;
 }
 
 export function GraphRoute() {
@@ -93,8 +112,9 @@ export function GraphRoute() {
   );
 
   // Custom node render: filled circle for contacts (color by type), outlined
-  // ring for ghosts. Label rendered just below the node when the zoom level
-  // is far enough in that text would be readable.
+  // ring for ghosts. Label rendered just below the node, with size + opacity
+  // scaling with zoom so labels are visible at overview AND readable
+  // up close without exploding in size.
   const drawNode = useCallback(
     (node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       // react-force-graph mutates the node objects with x/y/etc. so we cast
@@ -107,6 +127,10 @@ export function GraphRoute() {
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
       if (n.kind === "ghost") {
+        // Mask any edge lines underneath the ghost so the outline reads
+        // cleanly, then draw the outline on top.
+        ctx.fillStyle = cssVar("--bg-base", 1);
+        ctx.fill();
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = nodeColor(n);
         ctx.stroke();
@@ -115,14 +139,22 @@ export function GraphRoute() {
         ctx.fill();
       }
 
-      // Label appears once you zoom in enough; otherwise text is unreadable
-      // and just adds noise.
-      if (globalScale >= 1.5) {
-        const fontSize = 11 / globalScale;
+      // Labels: visible from zoom 0.5 upward. Font size is clamped so it
+      // stays readable at any zoom level (the divide-by-globalScale trick
+      // gives a constant on-screen size, but we cap min/max so very low
+      // zoom doesn't produce 50px text or 1px text).
+      if (globalScale >= 0.5) {
+        const rawSize = 12 / globalScale;
+        const fontSize = Math.max(2.5, Math.min(14, rawSize));
+        // Fade in as zoom increases; near full opacity by 0.8.
+        const opacity = Math.min(1, (globalScale - 0.4) * 3.5);
         ctx.font = `${fontSize}px Barlow, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = cssVar(n.kind === "ghost" ? "--fg-subtle" : "--fg", 0.85);
+        ctx.fillStyle = cssVar(
+          n.kind === "ghost" ? "--fg-muted" : "--fg-primary",
+          opacity
+        );
         ctx.fillText(n.label, x, y + radius + 2);
       }
     },
@@ -184,10 +216,10 @@ export function GraphRoute() {
               ctx.fill();
             }}
             linkColor={(l: object) => edgeColor(l as GraphEdge)}
-            linkWidth={1.2}
+            linkWidth={(l: object) => edgeWidth(l as GraphEdge)}
             linkDirectionalArrowLength={(l: object) =>
               (l as GraphEdge).edgeKind === "referral" || (l as GraphEdge).edgeKind === "parent"
-                ? 3
+                ? 9
                 : 0
             }
             linkDirectionalArrowRelPos={1}
@@ -200,29 +232,56 @@ export function GraphRoute() {
   );
 }
 
-/** Compact legend that floats in the header. */
+/** Compact legend that floats in the header. Two stacked rows: nodes
+ *  (filled or ringed circles) and edges (colored lines). */
 function Legend() {
-  const items: Array<{ label: string; tone: string; ringed?: boolean }> = [
+  const nodeItems: Array<{ label: string; tone: string; ringed?: boolean }> = [
     { label: "Client", tone: nodeColor({ kind: "contact", contactType: "client" } as GraphNode) },
     { label: "Prospect", tone: nodeColor({ kind: "contact", contactType: "prospect" } as GraphNode) },
     { label: "Other", tone: nodeColor({ kind: "contact", contactType: "other" } as GraphNode) },
     { label: "Ghost referrer", tone: nodeColor({ kind: "ghost", contactType: "" } as GraphNode), ringed: true },
   ];
+  const edgeItems: Array<{ label: string; tone: string }> = [
+    { label: "Referral", tone: edgeColor({ edgeKind: "referral" } as GraphEdge) },
+    { label: "Spouse / parent / child", tone: edgeColor({ edgeKind: "spouse" } as GraphEdge) },
+    { label: "Sibling / family", tone: edgeColor({ edgeKind: "sibling" } as GraphEdge) },
+    { label: "Friend", tone: edgeColor({ edgeKind: "friend" } as GraphEdge) },
+    { label: "Business partner", tone: edgeColor({ edgeKind: "business_partner" } as GraphEdge) },
+  ];
   return (
-    <div className="flex items-center gap-3 flex-wrap text-[10px] text-fg-muted">
-      {items.map((it) => (
-        <span key={it.label} className="inline-flex items-center gap-1.5">
-          <span
-            className="w-3 h-3 rounded-full"
-            style={
-              it.ringed
-                ? { border: `1.5px solid ${it.tone}`, background: "transparent" }
-                : { background: it.tone }
-            }
-          />
-          {it.label}
+    <div className="flex flex-col gap-1.5 text-[10px] text-fg-muted">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="font-condensed uppercase tracking-wider text-fg-subtle text-[9px] min-w-12">
+          Nodes
         </span>
-      ))}
+        {nodeItems.map((it) => (
+          <span key={it.label} className="inline-flex items-center gap-1.5">
+            <span
+              className="w-3 h-3 rounded-full"
+              style={
+                it.ringed
+                  ? { border: `1.5px solid ${it.tone}`, background: "transparent" }
+                  : { background: it.tone }
+              }
+            />
+            {it.label}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="font-condensed uppercase tracking-wider text-fg-subtle text-[9px] min-w-12">
+          Edges
+        </span>
+        {edgeItems.map((it) => (
+          <span key={it.label} className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-5 h-[2.5px] rounded-full"
+              style={{ background: it.tone }}
+            />
+            {it.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
