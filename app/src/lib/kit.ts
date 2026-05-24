@@ -308,6 +308,26 @@ export async function updateContactField(
   return parseKitJson<UpdateContactKitResult>(r);
 }
 
+/** Batch variant: update multiple fields atomically via JSON payload.
+ *  The `source` field on the resulting `contact_updated` event defaults to
+ *  "hermes:update-contact-fields" but can be overridden — the app passes
+ *  "app:edit-contact" so the Settings "last Hermes event" filter
+ *  (source NOT LIKE 'app:%') keeps excluding app-initiated edits. */
+export async function updateContactBatch(
+  contactId: string,
+  updates: Record<string, string>,
+  options?: { replace?: boolean; source?: string }
+): Promise<UpdateContactKitResult> {
+  const payload: Record<string, unknown> = {
+    id: contactId,
+    updates,
+  };
+  if (options?.replace) payload.replace = true;
+  if (options?.source) payload.source = options.source;
+  const r = await runKit(["--format=json", "update-contact"], payload);
+  return parseKitJson<UpdateContactKitResult>(r);
+}
+
 // ---- Settings ----
 
 export interface UpdateSettingResult {

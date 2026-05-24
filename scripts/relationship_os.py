@@ -3694,6 +3694,12 @@ def cmd_update_contact(args: argparse.Namespace) -> Dict[str, object]:
         json_text = sys.stdin.read() if args.json == "-" else args.json
         payload = json.loads(json_text)
 
+    # Source defaults to the Hermes-side label, but the app (or any other
+    # peer writer) can override via the JSON payload's `source` field so the
+    # Settings "last Hermes event" filter (source NOT LIKE 'app:%') keeps
+    # working correctly when app-initiated edits shell out through here.
+    source = "hermes:update-contact-fields"
+
     if payload is not None:
         if not isinstance(payload, dict):
             raise RelationshipOSError("update-contact payload must be a JSON object.")
@@ -3702,6 +3708,8 @@ def cmd_update_contact(args: argparse.Namespace) -> Dict[str, object]:
             payload.get("name") or payload.get("contact_name") or args.name or ""
         ).strip()
         replace_default = bool(payload.get("replace", False))
+        if payload.get("source"):
+            source = str(payload["source"]).strip() or source
         updates_payload = payload.get("updates") or {}
         if not isinstance(updates_payload, dict):
             raise RelationshipOSError(
@@ -3781,7 +3789,7 @@ def cmd_update_contact(args: argparse.Namespace) -> Dict[str, object]:
         contact_id=contact_id,
         subject_id=contact_id,
         payload={"diff": diff, "field_count": len(diff)},
-        source="hermes:update-contact-fields",
+        source=source,
     )
     synced = sync_consultant_views(store)
     return {

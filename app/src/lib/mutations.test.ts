@@ -1,29 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import type { ContactRow } from "@/lib/schema";
-
 // Mock the modules mutations.ts imports from. vi.mock is hoisted, so this
 // runs before the mutations import below.
 vi.mock("@/lib/db", () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock("@/lib/queries", () => ({
-  fetchContact: vi.fn(),
+vi.mock("@/lib/kit", () => ({
+  updateContactBatch: vi.fn(),
 }));
 
 import { getDb } from "@/lib/db";
-import { fetchContact } from "@/lib/queries";
+import { updateContactBatch } from "@/lib/kit";
 import {
   nowIso,
-  makeId,
   updateContact,
   updateTouchpointNotes,
   MAX_TOUCHPOINT_NOTE_LENGTH,
 } from "@/lib/mutations";
 
-// Fake Database with the two methods updateContact / updateTouchpointNotes
-// actually call. Each call gets recorded so tests can assert on the argv.
+// Fake Database for updateTouchpointNotes (the one remaining direct-SQL path).
 function fakeDb(opts: { rowsAffected?: number } = {}) {
   const calls: { method: "execute" | "select"; sql: string; args: unknown[] }[] = [];
   return {
@@ -39,35 +35,9 @@ function fakeDb(opts: { rowsAffected?: number } = {}) {
   };
 }
 
-function fakeContact(overrides: Partial<ContactRow> = {}): ContactRow {
-  return {
-    id: "c_test_1",
-    name: "Hayden Wang",
-    type: "client",
-    relationship_stage: "warm",
-    phone: "",
-    email: "hayden@example.com",
-    occupation: "",
-    company: "Salesforce",
-    birthday: "",
-    family: "",
-    policies: "",
-    financial_concerns: "",
-    interests: "",
-    referral_source: "",
-    next_review_date: "",
-    last_touch_date: "2026-05-22",
-    notes: "old notes",
-    archived_at: "",
-    created_at: "2026-01-01T10:00:00",
-    updated_at: "2026-05-22T10:00:00",
-    ...overrides,
-  } as ContactRow;
-}
-
 beforeEach(() => {
   vi.mocked(getDb).mockReset();
-  vi.mocked(fetchContact).mockReset();
+  vi.mocked(updateContactBatch).mockReset();
 });
 
 describe("nowIso", () => {
@@ -77,146 +47,111 @@ describe("nowIso", () => {
   });
 });
 
-describe("makeId", () => {
-  it("produces an e_YYYYMMDD_xxxx shape matching the Python kit", () => {
-    const id = makeId("e");
-    expect(id).toMatch(/^e_\d{8}_[0-9a-f]{4}$/);
-  });
-
-  it("respects the prefix", () => {
-    expect(makeId("p")).toMatch(/^p_/);
-    expect(makeId("foo")).toMatch(/^foo_/);
-  });
-});
-
-describe("updateContact", () => {
-  it("throws when the contact does not exist", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(null);
-    await expect(
-      updateContact({ id: "missing", changes: { phone: "+65 9123 4567" } })
-    ).rejects.toThrow(/Contact missing not found/);
-  });
-
-  it("returns early with eventId=null when no editable fields changed", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(fakeContact());
-    const db = fakeDb();
-    vi.mocked(getDb).mockResolvedValue(db as never);
-
-    // Phone is unchanged; updated_at not in inputs.
-    const result = await updateContact({
-      id: "c_test_1",
-      changes: { phone: "" },
-    });
+describe("updateContact (shells out to Python kit)", () => {
+  it("returns early with no-op result when changes are empty", async () => {
+    const result = await updateContact({ id: "c_test_1", changes: {} });
 
     expect(result.ok).toBe(true);
-    expect(result.eventId).toBeNull();
     expect(result.changedFields).toEqual([]);
-    // No BEGIN/UPDATE/INSERT/COMMIT should have been emitted.
-    expect(db.execute).not.toHaveBeenCalled();
+    expect(updateContactBatch).not.toHaveBeenCalled();
   });
 
-  it("silently drops non-editable fields (Hermes-managed)", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(fakeContact());
-    const db = fakeDb();
-    vi.mocked(getDb).mockResolvedValue(db as never);
+  it("returns early when every change is undefined (filtered out)", async () => {
+    const result = await updateContact({
+      id: "c_test_1",
+      changes: { phone: undefined, email: undefined },
+    });
+
+    expect(result.changedFields).toEqual([]);
+    expect(updateContactBatch).not.toHaveBeenCalled();
+  });
+
+  it("shells out with the kit-shaped payload (id, updates map, app source)", async () => {
+    vi.mocked(updateContactBatch).mockResolvedValue({
+      ok: true,
+      contact_id: "c_test_1",
+      contact_name: "Hayden Wang",
+      diff: {
+        phone: { from: "", to: "+65 9123 4567", action: "replaced" },
+        email: { from: "old@x.com", to: "new@x.com", action: "replaced" },
+      },
+      message: "Updated 2 field(s) on Hayden Wang.",
+    });
 
     const result = await updateContact({
       id: "c_test_1",
-      // type / relationship_stage / last_touch_date are Hermes-managed.
-      // Cast to any so TS doesn't catch this at compile-time — defense
-      // in depth requires the runtime guard, not just types.
-      changes: {
-        type: "prospect",
-        relationship_stage: "cold",
-        phone: "+65 9123 4567",
-      } as never,
+      changes: { phone: "+65 9123 4567", email: "new@x.com" },
+    });
+
+    expect(updateContactBatch).toHaveBeenCalledTimes(1);
+    const [contactId, updates, options] = vi.mocked(updateContactBatch).mock
+      .calls[0];
+    expect(contactId).toBe("c_test_1");
+    expect(updates).toEqual({
+      phone: "+65 9123 4567",
+      email: "new@x.com",
+    });
+    // The Settings "last Hermes event" filter excludes source LIKE 'app:%'.
+    // App edits must keep that prefix so they don't pollute the Hermes feed.
+    expect(options?.source).toBe("app:edit-contact");
+    expect(result.changedFields.sort()).toEqual(["email", "phone"]);
+  });
+
+  it("returns the changedFields the kit actually changed (not the proposed set)", async () => {
+    // The kit's diff may exclude fields whose proposed value matched the
+    // existing one — phone was changed, email was a no-op.
+    vi.mocked(updateContactBatch).mockResolvedValue({
+      ok: true,
+      contact_id: "c_test_1",
+      contact_name: "Hayden Wang",
+      diff: {
+        phone: { from: "", to: "+65 9123 4567", action: "replaced" },
+      },
+      message: "Updated 1 field(s) on Hayden Wang.",
+    });
+
+    const result = await updateContact({
+      id: "c_test_1",
+      changes: { phone: "+65 9123 4567", email: "already-correct@x.com" },
     });
 
     expect(result.changedFields).toEqual(["phone"]);
-    // Only one UPDATE — phone — plus updated_at.
-    const updates = db.calls.filter((c) =>
-      c.sql.startsWith("UPDATE contacts SET")
-    );
-    expect(updates).toHaveLength(1);
-    expect(updates[0].sql).toContain('"phone"');
-    expect(updates[0].sql).toContain('"updated_at"');
-    expect(updates[0].sql).not.toContain('"type"');
-    expect(updates[0].sql).not.toContain('"relationship_stage"');
   });
 
-  it("emits a contact_updated event with a field diff payload", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(
-      fakeContact({ phone: "", email: "old@example.com" })
-    );
-    const db = fakeDb();
-    vi.mocked(getDb).mockResolvedValue(db as never);
-
-    const result = await updateContact({
-      id: "c_test_1",
-      changes: { phone: "+65 9123 4567", email: "new@example.com" },
+  it("stringifies non-string values (TS allows them via Partial<ContactRow>)", async () => {
+    vi.mocked(updateContactBatch).mockResolvedValue({
+      ok: true,
+      contact_id: "c_test_1",
+      contact_name: "Hayden Wang",
+      diff: { notes: { from: "", to: "5", action: "replaced" } },
+      message: "Updated 1 field(s).",
     });
 
-    expect(result.changedFields.sort()).toEqual(["email", "phone"]);
-
-    const insert = db.calls.find((c) =>
-      c.sql.includes("INSERT INTO events")
-    );
-    expect(insert).toBeDefined();
-    // Event payload is JSON-encoded with diff + field_count.
-    const payload = JSON.parse(insert!.args[5] as string);
-    expect(payload.field_count).toBe(2);
-    expect(payload.diff.phone).toEqual({ from: "", to: "+65 9123 4567" });
-    expect(payload.diff.email).toEqual({
-      from: "old@example.com",
-      to: "new@example.com",
-    });
-    // source must be the app:edit-contact namespace so the Hermes-status
-    // query excludes it.
-    expect(insert!.args[6]).toBe("app:edit-contact");
-    expect(insert!.args[2]).toBe("contact_updated");
-  });
-
-  it("wraps the UPDATE + INSERT in a BEGIN/COMMIT transaction", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(fakeContact());
-    const db = fakeDb();
-    vi.mocked(getDb).mockResolvedValue(db as never);
-
+    // Force a non-string through (in real usage these come from form inputs
+    // so always strings, but the contract should handle it).
     await updateContact({
       id: "c_test_1",
-      changes: { phone: "+65 9123 4567" },
+      changes: { notes: 5 as unknown as string },
     });
 
-    const sqls = db.calls.map((c) => c.sql);
-    expect(sqls[0]).toBe("BEGIN");
-    expect(sqls[sqls.length - 1]).toBe("COMMIT");
-    // Both the UPDATE and the INSERT must land between BEGIN and COMMIT.
-    const beginIdx = sqls.indexOf("BEGIN");
-    const commitIdx = sqls.indexOf("COMMIT");
-    const inner = sqls.slice(beginIdx + 1, commitIdx);
-    expect(inner.some((s) => s.startsWith("UPDATE contacts SET"))).toBe(true);
-    expect(inner.some((s) => s.includes("INSERT INTO events"))).toBe(true);
+    const [, updates] = vi.mocked(updateContactBatch).mock.calls[0];
+    expect(updates).toEqual({ notes: "5" });
   });
 
-  it("rolls back on a mid-transaction error", async () => {
-    vi.mocked(fetchContact).mockResolvedValue(fakeContact());
-    const db = fakeDb();
-    // Fail on the INSERT (the second non-BEGIN call). Use call-count to
-    // target it: BEGIN → UPDATE → INSERT → COMMIT, so reject the 3rd call.
-    let callIdx = 0;
-    db.execute.mockImplementation(async (sql: string) => {
-      callIdx += 1;
-      db.calls.push({ method: "execute", sql, args: [] });
-      if (callIdx === 3) throw new Error("boom");
-      return { rowsAffected: 1 };
-    });
-    vi.mocked(getDb).mockResolvedValue(db as never);
+  it("propagates kit errors (validation rejection bubbles up)", async () => {
+    vi.mocked(updateContactBatch).mockRejectedValue(
+      new Error(
+        "relationship_os.py update-contact exited 1: Field 'type' is derived from touchpoints"
+      )
+    );
 
     await expect(
-      updateContact({ id: "c_test_1", changes: { phone: "+65 9123 4567" } })
-    ).rejects.toThrow(/boom/);
-
-    const sqls = db.calls.map((c) => c.sql);
-    expect(sqls).toContain("ROLLBACK");
+      updateContact({
+        id: "c_test_1",
+        // type is HERMES_MANAGED; the kit will reject it.
+        changes: { type: "prospect" } as never,
+      })
+    ).rejects.toThrow(/Field 'type' is derived from touchpoints/);
   });
 });
 

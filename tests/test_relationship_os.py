@@ -1142,6 +1142,31 @@ Assets: logo_dark.png, bg_mountain_clouds.png, bg_network_mesh.png.
             payload = json.loads(latest["payload"])
             self.assertIn("occupation", payload["diff"])
 
+    def test_update_contact_respects_source_override_from_payload(self):
+        """JSON payload can override the event source (used by the app when
+        shelling out, so Settings' "last Hermes event" filter excludes
+        app-initiated edits via the source NOT LIKE 'app:%' guard).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            env = self.sqlite_csv_env(base)
+            self.run_cli(["init", "--reset"], env)
+            logged = self.run_json_cli(
+                ["log-touchpoint", "--json", json.dumps(self.sample_touchpoint_payload())], env,
+            )
+            cid = logged["contact"]["id"]
+            payload = {
+                "id": cid,
+                "updates": {"occupation": "software developer"},
+                "source": "app:edit-contact",
+            }
+            self.run_json_cli(["update-contact", "--json", json.dumps(payload)], env)
+            events = self.run_json_cli(
+                ["events", "--kind", "contact_updated", "--contact-id", cid], env,
+            )
+            self.assertGreaterEqual(events["count"], 1)
+            self.assertEqual(events["events"][0]["source"], "app:edit-contact")
+
     def test_update_contact_by_name_resolves_unique(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
