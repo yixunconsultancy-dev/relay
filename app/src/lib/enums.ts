@@ -91,8 +91,31 @@ export const EVENT_KINDS = [
   "policy_archived",
   "clarification_queued",
   "clarification_resolved",
+  "relationship_created",
+  "relationship_removed",
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
+
+export const RELATIONSHIP_KINDS = [
+  "spouse",
+  "parent",
+  "child",
+  "sibling",
+  "family",
+  "friend",
+  "business_partner",
+] as const;
+export type RelationshipKind = (typeof RELATIONSHIP_KINDS)[number];
+
+export const RELATIONSHIP_KIND_LABEL: Record<RelationshipKind, string> = {
+  spouse: "Spouse",
+  parent: "Parent",
+  child: "Child",
+  sibling: "Sibling",
+  family: "Family",
+  friend: "Friend",
+  business_partner: "Business partner",
+};
 
 // Visual ordering for stage urgency. Higher = more urgent to act on.
 export const STAGE_URGENCY: Record<RelationshipStage, number> = {

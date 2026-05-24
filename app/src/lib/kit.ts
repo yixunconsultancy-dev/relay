@@ -446,6 +446,51 @@ export interface RenameContactResult {
   message: string;
 }
 
+// ---- Contact relationships ----
+
+import type { RelationshipKind } from "@/lib/enums";
+
+export interface LinkContactResult {
+  ok: boolean;
+  id?: string;
+  from_contact_id?: string;
+  to_contact_id?: string;
+  kind?: string;
+  label?: string;
+  duplicate?: boolean;
+  message: string;
+}
+
+export async function linkContact(
+  fromContactId: string,
+  toContactId: string,
+  kind: RelationshipKind,
+  options?: { label?: string; notes?: string }
+): Promise<LinkContactResult> {
+  const args = [
+    "--format=json",
+    "link-contact",
+    "--from", fromContactId,
+    "--to", toContactId,
+    "--kind", kind,
+  ];
+  if (options?.label) args.push("--label", options.label);
+  if (options?.notes) args.push("--notes", options.notes);
+  const r = await runKit(args);
+  return parseKitJson<LinkContactResult>(r);
+}
+
+export async function unlinkContact(
+  relationshipId: string
+): Promise<{ ok: boolean; id: string; message: string }> {
+  const r = await runKit([
+    "--format=json",
+    "unlink-contact",
+    "--id", relationshipId,
+  ]);
+  return parseKitJson<{ ok: boolean; id: string; message: string }>(r);
+}
+
 // ---- Clarifications ----
 
 export interface ResolveClarificationResult {

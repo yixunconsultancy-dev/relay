@@ -53,6 +53,7 @@ SETTINGS = "Settings"
 EVENTS = "Events"
 POLICIES = "Policies"
 CLARIFICATIONS = "Clarifications"
+RELATIONSHIPS = "Relationships"
 
 # Append-only audit table. Every durable write (touchpoint logged, reminder
 # completed/snoozed/cancelled, etc.) records one row here so the consultant or
@@ -75,6 +76,8 @@ VALID_EVENT_KINDS = {
     "policy_archived",
     "clarification_queued",
     "clarification_resolved",
+    "relationship_created",
+    "relationship_removed",
 }
 
 # Tables mirrored to the consultant-facing view. The Events table is
@@ -214,6 +217,23 @@ HEADERS: Dict[str, List[str]] = {
         "resolution_payload",
         "created_at",
         "resolved_at",
+    ],
+    # Contact-to-contact relationships (family ties, business partners,
+    # etc.). Feeds the graph view and the contact-detail family panel.
+    # Pure data — no validation against existing contact IDs at write time,
+    # so a deleted contact leaves dangling edges that the graph view filters
+    # out at render time.
+    RELATIONSHIPS: [
+        "id",
+        "from_contact_id",
+        "to_contact_id",
+        # spouse, parent, child, sibling, family, friend, business_partner
+        "kind",
+        # Optional free-text refinement: "son", "father-in-law",
+        # "business partner since 2018"
+        "label",
+        "notes",
+        "created_at",
     ],
 }
 
@@ -2508,6 +2528,201 @@ def _brief_debt_top(store: Store, today: date, limit: int = 5) -> List[Dict[str,
 
 VALID_CLARIFICATION_RESOLUTIONS = {"log_anyway", "log_corrected", "discard"}
 VALID_CLARIFICATION_STATUSES = {"pending", "resolved", "abandoned"}
+
+VALID_RELATIONSHIP_KINDS = {
+    "spouse",
+    "parent",
+    "child",
+    "sibling",
+    "family",
+    "friend",
+    "business_partner",
+}
+# Kinds that are inherently bidirectional — A→B "spouse" is duplicate of
+# B→A "spouse". parent/child are asymmetric (different meaning).
+_SYMMETRIC_KINDS = {"spouse", "sibling", "family", "friend", "business_partner"}
+
+
+def _relationship_is_duplicate(
+    existing: List[Dict[str, str]],
+    from_id: str,
+    to_id: str,
+    kind: str,
+) -> bool:
+    """True if an equivalent relationship already exists.
+
+    Symmetric kinds (spouse, sibling, friend, family, business_partner)
+    treat (A→B) and (B→A) as the same edge. parent↔child are recognised
+    as inverses of each other.
+    """
+    inverse_kind = {"parent": "child", "child": "parent"}.get(kind)
+    for r in existing:
+        r_kind = r.get("kind", "")
+        r_from = r.get("from_contact_id", "")
+        r_to = r.get("to_contact_id", "")
+        if r_kind == kind and r_from == from_id and r_to == to_id:
+            return True
+        if kind in _SYMMETRIC_KINDS and r_kind == kind and r_from == to_id and r_to == from_id:
+            return True
+        if inverse_kind and r_kind == inverse_kind and r_from == to_id and r_to == from_id:
+            return True
+    return False
+
+
+def cmd_link_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Create a contact-to-contact relationship (family tie, business partner, etc.).
+
+    Feeds the AWMOS graph view and the contact-detail family panel.
+    """
+    store = get_store()
+    store.ensure()
+
+    from_id = (args.from_contact_id or "").strip()
+    to_id = (args.to_contact_id or "").strip()
+    kind = (args.kind or "").strip()
+
+    if not from_id or not to_id:
+        raise RelationshipOSError("link-contact requires --from <contact_id> and --to <contact_id>.")
+    if from_id == to_id:
+        raise RelationshipOSError("Cannot link a contact to itself.")
+    if kind not in VALID_RELATIONSHIP_KINDS:
+        raise RelationshipOSError(
+            f"--kind must be one of {sorted(VALID_RELATIONSHIP_KINDS)}; got {kind!r}."
+        )
+
+    # Verify both contacts exist (defense against typos / stale IDs).
+    contacts = store.read(CONTACTS)
+    contact_ids = {c.get("id") for c in contacts}
+    if from_id not in contact_ids:
+        raise RelationshipOSError(f"--from contact {from_id!r} not found.")
+    if to_id not in contact_ids:
+        raise RelationshipOSError(f"--to contact {to_id!r} not found.")
+
+    existing = store.read(RELATIONSHIPS)
+    if _relationship_is_duplicate(existing, from_id, to_id, kind):
+        # Return success with a friendly note — not an error — so the UI
+        # doesn't have to special-case duplicate-on-double-click.
+        return {
+            "ok": True,
+            "command": "link-contact",
+            "duplicate": True,
+            "message": f"Equivalent {kind} relationship already exists between these contacts.",
+        }
+
+    today = today_in_settings(store)
+    rel_id = make_id("rel", today)
+    row = {
+        "id": rel_id,
+        "from_contact_id": from_id,
+        "to_contact_id": to_id,
+        "kind": kind,
+        "label": (args.label or "").strip(),
+        "notes": (args.notes or "").strip(),
+        "created_at": now_iso(),
+    }
+    store.append(RELATIONSHIPS, row)
+    log_event(
+        store,
+        "relationship_created",
+        contact_id=from_id,
+        subject_id=rel_id,
+        payload={
+            "from_contact_id": from_id,
+            "to_contact_id": to_id,
+            "kind": kind,
+            "label": row["label"],
+        },
+        source=str(getattr(args, "event_source", None) or "app:link-contact"),
+    )
+    return {
+        "ok": True,
+        "command": "link-contact",
+        "id": rel_id,
+        "from_contact_id": from_id,
+        "to_contact_id": to_id,
+        "kind": kind,
+        "label": row["label"],
+        "message": f"Linked ({kind}).",
+    }
+
+
+def cmd_unlink_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Remove a contact-to-contact relationship by ID."""
+    store = get_store()
+    store.ensure()
+
+    rel_id = (args.relationship_id or "").strip()
+    if not rel_id:
+        raise RelationshipOSError("unlink-contact requires --id <relationship_id>.")
+
+    rows = store.read(RELATIONSHIPS)
+    target = next((r for r in rows if r.get("id") == rel_id), None)
+    if not target:
+        raise RelationshipOSError(f"No relationship with id {rel_id!r}.")
+
+    new_rows = [r for r in rows if r.get("id") != rel_id]
+    store.replace(RELATIONSHIPS, new_rows)
+    log_event(
+        store,
+        "relationship_removed",
+        contact_id=target.get("from_contact_id", ""),
+        subject_id=rel_id,
+        payload={
+            "from_contact_id": target.get("from_contact_id"),
+            "to_contact_id": target.get("to_contact_id"),
+            "kind": target.get("kind"),
+        },
+        source=str(getattr(args, "event_source", None) or "app:unlink-contact"),
+    )
+    return {
+        "ok": True,
+        "command": "unlink-contact",
+        "id": rel_id,
+        "message": "Relationship removed.",
+    }
+
+
+def cmd_list_relationships(args: argparse.Namespace) -> Dict[str, object]:
+    """List relationships. Filters: --contact-id (involves contact, either direction),
+    --kind, --limit."""
+    store = get_store()
+    store.ensure()
+
+    contact_id = (args.contact_id or "").strip()
+    kind_filter = (args.kind or "").strip()
+    limit = max(1, int(args.limit or 1000))
+
+    rows = store.read(RELATIONSHIPS)
+    if contact_id:
+        rows = [
+            r for r in rows
+            if r.get("from_contact_id") == contact_id or r.get("to_contact_id") == contact_id
+        ]
+    if kind_filter:
+        rows = [r for r in rows if r.get("kind") == kind_filter]
+    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    rows = rows[:limit]
+
+    # Enrich with contact names for the UI (saves a JOIN at read time).
+    contact_by_id = {c.get("id"): c for c in store.read(CONTACTS)}
+    enriched = []
+    for r in rows:
+        from_c = contact_by_id.get(r.get("from_contact_id", ""))
+        to_c = contact_by_id.get(r.get("to_contact_id", ""))
+        enriched.append({
+            **r,
+            "from_contact_name": from_c.get("name") if from_c else "",
+            "to_contact_name": to_c.get("name") if to_c else "",
+            "from_archived": bool(from_c and from_c.get("archived_at")),
+            "to_archived": bool(to_c and to_c.get("archived_at")),
+        })
+
+    return {
+        "ok": True,
+        "command": "list-relationships",
+        "count": len(enriched),
+        "relationships": enriched,
+    }
 
 
 def cmd_queue_clarification(args: argparse.Namespace) -> Dict[str, object]:
@@ -5079,6 +5294,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the source label for the clarification_resolved event (default: app:resolve-clarification).",
     )
     resolve_clar_p.set_defaults(func=cmd_resolve_clarification)
+
+    link_c_p = sub.add_parser(
+        "link-contact",
+        help="Create a contact-to-contact relationship (family / business / friend).",
+    )
+    link_c_p.add_argument("--from", dest="from_contact_id", required=True,
+                          help="ID of the originating contact.")
+    link_c_p.add_argument("--to", dest="to_contact_id", required=True,
+                          help="ID of the linked contact.")
+    link_c_p.add_argument("--kind", required=True,
+                          help="spouse / parent / child / sibling / family / friend / business_partner")
+    link_c_p.add_argument("--label", default="",
+                          help="Optional refinement: 'son', 'father-in-law', etc.")
+    link_c_p.add_argument("--notes", default="")
+    link_c_p.add_argument("--event-source", dest="event_source", default=None,
+                          help="Override source label for the relationship_created event.")
+    link_c_p.set_defaults(func=cmd_link_contact)
+
+    unlink_c_p = sub.add_parser(
+        "unlink-contact",
+        help="Remove a contact-to-contact relationship by ID.",
+    )
+    unlink_c_p.add_argument("--id", dest="relationship_id", required=True)
+    unlink_c_p.add_argument("--event-source", dest="event_source", default=None)
+    unlink_c_p.set_defaults(func=cmd_unlink_contact)
+
+    list_rel_p = sub.add_parser(
+        "list-relationships",
+        help="List contact relationships. --contact-id matches either direction.",
+    )
+    list_rel_p.add_argument("--contact-id", dest="contact_id", default="",
+                            help="Only relationships involving this contact (either direction).")
+    list_rel_p.add_argument("--kind", default="",
+                            help="Filter by kind.")
+    list_rel_p.add_argument("--limit", type=int, default=1000)
+    list_rel_p.set_defaults(func=cmd_list_relationships)
 
     prep_p = sub.add_parser("prep", help="Prepare for a contact")
     prep_p.add_argument("--name", required=True)

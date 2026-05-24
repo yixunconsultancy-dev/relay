@@ -1142,6 +1142,143 @@ Assets: logo_dark.png, bg_mountain_clouds.png, bg_network_mesh.png.
             payload = json.loads(latest["payload"])
             self.assertIn("occupation", payload["diff"])
 
+    def _seed_two_contacts(self, env) -> tuple:
+        a = self.run_json_cli(
+            ["log-touchpoint", "--json", json.dumps(self.sample_touchpoint_payload(contact_name="Alice"))], env,
+        )
+        b = self.run_json_cli(
+            ["log-touchpoint", "--json", json.dumps(self.sample_touchpoint_payload(contact_name="Bob"))], env,
+        )
+        return a["contact"]["id"], b["contact"]["id"]
+
+    def test_link_contact_creates_relationship_and_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            result = self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "spouse", "--label", "wife"], env
+            )
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["kind"], "spouse")
+            self.assertTrue(result["id"].startswith("rel_"))
+            events = self.run_json_cli(
+                ["events", "--kind", "relationship_created", "--contact-id", cid_a], env
+            )
+            self.assertGreaterEqual(events["count"], 1)
+
+    def test_link_contact_rejects_self_link(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, _ = self._seed_two_contacts(env)
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), "--env", str(ROOT / ".env.example"),
+                 "--format=json", "link-contact",
+                 "--from", cid_a, "--to", cid_a, "--kind", "spouse"],
+                cwd=ROOT, text=True, capture_output=True, env=env,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("Cannot link a contact to itself", proc.stdout)
+
+    def test_link_contact_rejects_unknown_contact_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, _ = self._seed_two_contacts(env)
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), "--env", str(ROOT / ".env.example"),
+                 "--format=json", "link-contact",
+                 "--from", cid_a, "--to", "c_nonexistent", "--kind", "family"],
+                cwd=ROOT, text=True, capture_output=True, env=env,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("not found", proc.stdout)
+
+    def test_link_contact_rejects_invalid_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), "--env", str(ROOT / ".env.example"),
+                 "--format=json", "link-contact",
+                 "--from", cid_a, "--to", cid_b, "--kind", "frenemy"],
+                cwd=ROOT, text=True, capture_output=True, env=env,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("kind must be one of", proc.stdout)
+
+    def test_link_contact_detects_duplicate_symmetric_kinds(self):
+        """A→B spouse + B→A spouse should be flagged as duplicate, not error."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "spouse"], env
+            )
+            second = self.run_json_cli(
+                ["link-contact", "--from", cid_b, "--to", cid_a, "--kind", "spouse"], env
+            )
+            self.assertTrue(second["ok"])
+            self.assertTrue(second.get("duplicate"))
+
+    def test_link_contact_detects_parent_child_inverse(self):
+        """A 'parent of' B + B 'child of' A → inverse-duplicate."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "parent"], env
+            )
+            second = self.run_json_cli(
+                ["link-contact", "--from", cid_b, "--to", cid_a, "--kind", "child"], env
+            )
+            self.assertTrue(second.get("duplicate"))
+
+    def test_unlink_contact_removes_relationship_and_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            linked = self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "friend"], env
+            )
+            rel_id = linked["id"]
+            result = self.run_json_cli(["unlink-contact", "--id", rel_id], env)
+            self.assertTrue(result["ok"])
+            listed = self.run_json_cli(["list-relationships", "--contact-id", cid_a], env)
+            self.assertEqual(listed["count"], 0)
+
+    def test_list_relationships_returns_both_directions(self):
+        """--contact-id matches rows where the contact appears as from OR to."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "friend"], env
+            )
+            from_b = self.run_json_cli(["list-relationships", "--contact-id", cid_b], env)
+            self.assertEqual(from_b["count"], 1)
+            self.assertEqual(from_b["relationships"][0]["from_contact_id"], cid_a)
+            self.assertEqual(from_b["relationships"][0]["to_contact_id"], cid_b)
+
+    def test_list_relationships_enriches_with_contact_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            cid_a, cid_b = self._seed_two_contacts(env)
+            self.run_json_cli(
+                ["link-contact", "--from", cid_a, "--to", cid_b, "--kind", "sibling"], env
+            )
+            listed = self.run_json_cli(["list-relationships"], env)
+            row = listed["relationships"][0]
+            self.assertEqual(row["from_contact_name"], "Alice")
+            self.assertEqual(row["to_contact_name"], "Bob")
+
     def test_update_contact_accepts_address_field(self):
         """address is in CONSULTANT_MANAGED_FIELDS and accepts updates."""
         with tempfile.TemporaryDirectory() as tmp:

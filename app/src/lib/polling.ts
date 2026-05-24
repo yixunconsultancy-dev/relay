@@ -30,6 +30,7 @@ export function dispatchInvalidations(
   let touchpointTouched = false;
   let contactListTouched = false;
   let clarificationsTouched = false;
+  let relationshipsTouched = false;
 
   for (const e of events) {
     if (e.contact_id) touchedContacts.add(e.contact_id);
@@ -87,6 +88,12 @@ export function dispatchInvalidations(
           contactListTouched = true;
         }
         break;
+      case "relationship_created":
+      case "relationship_removed":
+        // Refresh relationship-shaped queries so the family panel + graph
+        // view update without a manual reload.
+        relationshipsTouched = true;
+        break;
     }
   }
 
@@ -113,6 +120,9 @@ export function dispatchInvalidations(
   }
   if (clarificationsTouched) {
     queryClient.invalidateQueries({ queryKey: ["clarifications", "pending"] });
+  }
+  if (relationshipsTouched) {
+    queryClient.invalidateQueries({ queryKey: ["relationships"] });
   }
   // Always bump the day's daily-focus so follow-ups-due refreshes.
   queryClient.invalidateQueries({ queryKey: ["daily-focus"] });

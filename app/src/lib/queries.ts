@@ -344,6 +344,47 @@ export function usePendingClarifications() {
   });
 }
 
+const ALL_RELATIONSHIP_COLS =
+  '"id","from_contact_id","to_contact_id","kind","label","notes","created_at"';
+
+export async function fetchAllRelationships(): Promise<import("@/lib/schema").RelationshipRow[]> {
+  const db = await getDb();
+  return db.select<import("@/lib/schema").RelationshipRow[]>(
+    `SELECT ${ALL_RELATIONSHIP_COLS} FROM relationships ORDER BY created_at DESC`
+  );
+}
+
+/** All relationships involving a contact (either direction). */
+export async function fetchRelationshipsForContact(
+  contactId: string
+): Promise<import("@/lib/schema").RelationshipRow[]> {
+  const db = await getDb();
+  return db.select<import("@/lib/schema").RelationshipRow[]>(
+    `SELECT ${ALL_RELATIONSHIP_COLS} FROM relationships
+       WHERE from_contact_id = $1 OR to_contact_id = $1
+       ORDER BY created_at DESC`,
+    [contactId]
+  );
+}
+
+export function useAllRelationships() {
+  return useQuery({
+    queryKey: ["relationships"] as const,
+    queryFn: fetchAllRelationships,
+  });
+}
+
+export function useRelationshipsForContact(contactId: string | undefined) {
+  return useQuery({
+    queryKey: contactId
+      ? (["relationships", "for-contact", contactId] as const)
+      : (["relationships", "none"] as const),
+    queryFn: () =>
+      contactId ? fetchRelationshipsForContact(contactId) : Promise.resolve([]),
+    enabled: Boolean(contactId),
+  });
+}
+
 export function usePendingReminderCountByContact() {
   return useQuery({
     queryKey: ["reminders", "pending-counts"] as const,

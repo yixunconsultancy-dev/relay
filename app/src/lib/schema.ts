@@ -85,6 +85,29 @@ export interface SettingRow {
 }
 
 /**
+ * Contact-to-contact relationship row. Feeds the graph view + the
+ * contact-detail family panel. Kinds: spouse, parent, child, sibling,
+ * family (catch-all), friend, business_partner.
+ */
+export interface RelationshipRow {
+  id: string;
+  from_contact_id: string;
+  to_contact_id: string;
+  kind: string;
+  label: string;
+  notes: string;
+  created_at: string;
+}
+
+/** list-relationships enriches each row with the contact names + archived flags. */
+export interface EnrichedRelationship extends RelationshipRow {
+  from_contact_name: string;
+  to_contact_name: string;
+  from_archived: boolean;
+  to_archived: boolean;
+}
+
+/**
  * Clarification queue row. Used during bulk imports when Hermes can't
  * extract confidently — the row is parked here for triage in the AWMOS
  * /clarifications route rather than asked one-by-one inline in chat.

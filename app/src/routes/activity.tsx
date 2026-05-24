@@ -31,6 +31,8 @@ const KIND_LABEL: Record<EventKind, string> = {
   policy_archived: "Policy archived",
   clarification_queued: "Clarification queued",
   clarification_resolved: "Clarification resolved",
+  relationship_created: "Relationship linked",
+  relationship_removed: "Relationship unlinked",
 };
 
 function kindLabel(kind: string): string {
