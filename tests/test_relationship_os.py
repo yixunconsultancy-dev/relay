@@ -1142,6 +1142,54 @@ Assets: logo_dark.png, bg_mountain_clouds.png, bg_network_mesh.png.
             payload = json.loads(latest["payload"])
             self.assertIn("occupation", payload["diff"])
 
+    def test_today_brief_returns_structured_composite(self):
+        """today-brief returns reminders_due + birthdays_today + ripe_signals
+        + debt_top + stats, plus a Telegram-ready brief_text."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            env = self.sqlite_csv_env(base)
+            self.run_cli(["init", "--reset"], env)
+            # Log a touchpoint with a reminder due today.
+            payload = self.sample_touchpoint_payload(contact_name="Vince")
+            payload["reminder_due"] = "2026-05-25"  # arbitrary "today" for the test
+            payload["reminder_priority"] = "high"
+            payload["reminder_context"] = "Send the SRS sheet"
+            payload["reminder_type"] = "follow_up"
+            self.run_json_cli(["log-touchpoint", "--json", json.dumps(payload)], env)
+            brief = self.run_json_cli(["today-brief"], env)
+            self.assertEqual(brief.get("command"), "today-brief")
+            self.assertIn("reminders_due", brief)
+            self.assertIn("birthdays_today", brief)
+            self.assertIn("ripe_signals", brief)
+            self.assertIn("debt_top", brief)
+            self.assertIn("stats", brief)
+            self.assertIn("brief_text", brief)
+            # Stats keys
+            stats = brief["stats"]
+            self.assertIn("reminders_due_count", stats)
+            self.assertIn("birthdays_today_count", stats)
+            self.assertIn("ripe_count", stats)
+            self.assertIn("debt_total_count", stats)
+            # brief_text is non-empty and references the consultant name greeting
+            self.assertIn("Good morning", brief["brief_text"])
+
+    def test_today_brief_text_format_returns_human_readable(self):
+        """When run with --format=text, today-brief outputs the brief_text
+        directly (Telegram-ready, no JSON)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            env = self.sqlite_csv_env(base)
+            self.run_cli(["init", "--reset"], env)
+            text = self.run_cli(["today-brief"], env)  # default format is text
+            self.assertIn("Good morning", text)
+            self.assertIn("Reminders due today", text)
+            self.assertIn("Birthdays today", text)
+            self.assertIn("Ripe to reach out", text)
+            self.assertIn("Relationship debt", text)
+            # No raw JSON should leak when format=text
+            self.assertNotIn('"ok":', text)
+            self.assertNotIn('"command":', text)
+
     def test_update_contact_respects_source_override_from_payload(self):
         """JSON payload can override the event source (used by the app when
         shelling out, so Settings' "last Hermes event" filter excludes

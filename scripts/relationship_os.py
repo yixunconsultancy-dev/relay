@@ -2320,6 +2320,268 @@ def parse_iso_date(value: str) -> Optional[date]:
         return None
 
 
+def _brief_reminders_due(store: Store, today: date) -> List[Dict[str, str]]:
+    """Pending reminders with due_date <= today, sorted high → low priority."""
+    out = []
+    for row in store.read(REMINDERS):
+        if row.get("status") != "pending":
+            continue
+        due = parse_iso_date(row.get("due_date", ""))
+        if not due or due > today:
+            continue
+        out.append(row)
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    out.sort(key=lambda r: (priority_order.get(r.get("priority", "medium"), 1), r.get("due_date", "")))
+    return out
+
+
+def _brief_birthdays_today(store: Store, today: date) -> List[Dict[str, object]]:
+    """Contacts whose birthday matches today's MM-DD."""
+    target = (today.month, today.day)
+    out: List[Dict[str, object]] = []
+    for row in store.read(CONTACTS):
+        if row.get("archived_at"):
+            continue
+        raw = (row.get("birthday") or "").strip()
+        if not raw:
+            continue
+        parsed = parse_iso_date(raw)
+        if not parsed:
+            # Try DD/MM/YYYY
+            try:
+                parts = raw.split("/")
+                if len(parts) == 3:
+                    day = int(parts[0])
+                    month = int(parts[1])
+                    year_raw = int(parts[2])
+                    year = year_raw if year_raw > 100 else (2000 + year_raw if year_raw < 30 else 1900 + year_raw)
+                    parsed = date(year, month, day)
+            except (ValueError, IndexError):
+                pass
+        if not parsed:
+            continue
+        if (parsed.month, parsed.day) != target:
+            continue
+        age_turning = today.year - parsed.year if parsed.year > 1900 else None
+        out.append({
+            "name": row.get("name"),
+            "contact_id": row.get("id"),
+            "age_turning": age_turning,
+        })
+    return out
+
+
+def _brief_ripe_signals(store: Store, today: date, limit: int = 5) -> List[Dict[str, object]]:
+    """Port of lib/ripe.ts: ≥2 positive touchpoints in last 30d, last touch ≤21d, not client, not archived."""
+    WINDOW = 30
+    RECENCY = 21
+    MIN_POSITIVE = 2
+
+    contacts_by_id: Dict[str, Dict[str, str]] = {}
+    for c in store.read(CONTACTS):
+        if c.get("archived_at"):
+            continue
+        if c.get("type") == "client":
+            continue
+        contacts_by_id[c.get("id", "")] = c
+
+    pos_counts: Dict[str, int] = {}
+    last_seen: Dict[str, int] = {}
+    for t in store.read(TOUCHPOINTS):
+        cid = t.get("contact_id", "")
+        if cid not in contacts_by_id:
+            continue
+        d = parse_iso_date(t.get("date", ""))
+        if not d:
+            continue
+        days_ago = (today - d).days
+        if days_ago < 0:
+            continue
+        if days_ago < last_seen.get(cid, 999999):
+            last_seen[cid] = days_ago
+        if t.get("sentiment") == "positive" and days_ago <= WINDOW:
+            pos_counts[cid] = pos_counts.get(cid, 0) + 1
+
+    out: List[Dict[str, object]] = []
+    for cid, c in contacts_by_id.items():
+        pc = pos_counts.get(cid, 0)
+        ls = last_seen.get(cid)
+        if pc < MIN_POSITIVE or ls is None or ls > RECENCY:
+            continue
+        recency_bonus = 5 if ls <= 7 else 0
+        score = pc * 2 + recency_bonus
+        out.append({
+            "name": c.get("name"),
+            "contact_id": cid,
+            "positive_count": pc,
+            "days_since_last": ls,
+            "score": score,
+        })
+    out.sort(key=lambda r: (-r["score"], r["days_since_last"]))  # type: ignore[arg-type,operator]
+    return out[:limit]
+
+
+def _brief_debt_top(store: Store, today: date, limit: int = 5) -> List[Dict[str, object]]:
+    """Port of lib/debt.ts categories (at_risk, cooling, unfollowed_action, stale_prospect)."""
+    COOLING = 30
+    AT_RISK = 60
+    STALE_PROSPECT = 14
+    UNFOLLOWED_GRACE = 7
+    PRIORITY = {"at_risk": 0, "unfollowed_action": 1, "cooling": 2, "stale_prospect": 3}
+
+    contacts = [c for c in store.read(CONTACTS) if not c.get("archived_at")]
+    contacts_by_id = {c.get("id", ""): c for c in contacts}
+
+    flags: List[Dict[str, object]] = []
+    for c in contacts:
+        ttype = c.get("type", "")
+        stage = c.get("relationship_stage", "")
+        last = parse_iso_date(c.get("last_touch_date", ""))
+        days = (today - last).days if last else None
+        no_touch = days is None
+        if ttype == "client" and (no_touch or (days or 0) >= AT_RISK):
+            flags.append({"category": "at_risk", "name": c.get("name"), "contact_id": c.get("id"), "days_since": days})
+            continue
+        if stage in ("warm", "hot") and (no_touch or (days or 0) >= COOLING):
+            flags.append({"category": "cooling", "name": c.get("name"), "contact_id": c.get("id"), "days_since": days})
+            continue
+        if ttype == "prospect" and (no_touch or (days or 0) >= STALE_PROSPECT):
+            flags.append({"category": "stale_prospect", "name": c.get("name"), "contact_id": c.get("id"), "days_since": days})
+
+    # Unfollowed actions
+    reminder_tp_ids = {r.get("source_touchpoint_id") for r in store.read(REMINDERS) if r.get("source_touchpoint_id")}
+    for t in store.read(TOUCHPOINTS):
+        if not (t.get("action_items") or "").strip():
+            continue
+        if t.get("id") in reminder_tp_ids:
+            continue
+        tp_date = parse_iso_date(t.get("date", ""))
+        if not tp_date:
+            continue
+        tp_days = (today - tp_date).days
+        if tp_days < UNFOLLOWED_GRACE:
+            continue
+        contact = contacts_by_id.get(t.get("contact_id", ""))
+        if not contact:
+            continue
+        flags.append({
+            "category": "unfollowed_action",
+            "name": contact.get("name"),
+            "contact_id": contact.get("id"),
+            "days_since": tp_days,
+            "action_items": t.get("action_items"),
+        })
+
+    flags.sort(key=lambda f: (PRIORITY[str(f["category"])], -(f["days_since"] or 9999)))  # type: ignore[arg-type]
+    return flags[:limit]
+
+
+def cmd_today_brief(args: argparse.Namespace) -> Dict[str, object]:
+    """Morning-brief composite: reminders due + birthdays today + ripe + debt.
+
+    Designed to be called once at 9am SGT by the morning brief cron job, with
+    output sent as a Telegram message to the consultant. Also useful as a
+    standalone CLI command — `python3 scripts/relationship_os.py today-brief`
+    gives an at-a-glance summary.
+    """
+    store = get_store()
+    store.ensure()
+    today = today_in_settings(store)
+    settings_map = {row.get("key"): row.get("value") for row in store.read(SETTINGS)}
+    consultant_name = (settings_map.get("name") or "Consultant").strip() or "Consultant"
+
+    reminders = _brief_reminders_due(store, today)
+    birthdays = _brief_birthdays_today(store, today)
+    ripe = _brief_ripe_signals(store, today, limit=5)
+    debt = _brief_debt_top(store, today, limit=5)
+    debt_total = len([f for f in _brief_debt_top(store, today, limit=10_000)])
+
+    # Human-readable brief for direct Telegram delivery.
+    lines = [
+        f"Good morning, {consultant_name}.",
+        f"{today.strftime('%A, %d %B %Y')}",
+        "",
+    ]
+    lines.append(f"Reminders due today ({len(reminders)})")
+    if reminders:
+        for r in reminders[:10]:
+            prio = (r.get("priority") or "med").upper()
+            lines.append(f"  {prio:6s} {r.get('contact_name')} — {r.get('context') or '(no context)'}")
+        if len(reminders) > 10:
+            lines.append(f"  …and {len(reminders) - 10} more")
+    else:
+        lines.append("  None.")
+    lines.append("")
+
+    lines.append(f"Birthdays today ({len(birthdays)})")
+    if birthdays:
+        for b in birthdays:
+            if b.get("age_turning") is not None:
+                lines.append(f"  {b['name']} (turning {b['age_turning']})")
+            else:
+                lines.append(f"  {b['name']}")
+    else:
+        lines.append("  None.")
+    lines.append("")
+
+    lines.append(f"Ripe to reach out ({len(ripe)})")
+    if ripe:
+        for r in ripe:
+            since = r["days_since_last"]
+            since_label = "today" if since == 0 else f"{since}d since last"
+            lines.append(f"  {r['name']} — {r['positive_count']} positive in last 30d, {since_label}")
+    else:
+        lines.append("  No standout opportunities right now.")
+    lines.append("")
+
+    lines.append(f"Relationship debt ({debt_total} total, top {len(debt)})")
+    if debt:
+        for f in debt:
+            cat = str(f["category"]).replace("_", " ")
+            days = f.get("days_since")
+            tail = f"{days}d" if days is not None else "no touch"
+            note = ""
+            if f.get("action_items"):
+                action = str(f["action_items"])[:60]
+                if len(str(f["action_items"])) > 60:
+                    action += "…"
+                note = f' — "{action}"'
+            lines.append(f"  {cat:18s}· {f['name']} · {tail}{note}")
+    else:
+        lines.append("  Inbox zero.")
+
+    brief_text = "\n".join(lines)
+
+    return {
+        "ok": True,
+        "command": "today-brief",
+        "date": today.isoformat(),
+        "consultant_name": consultant_name,
+        "reminders_due": [
+            {
+                "id": r.get("id"),
+                "contact_name": r.get("contact_name"),
+                "contact_id": r.get("contact_id"),
+                "context": r.get("context"),
+                "priority": r.get("priority"),
+                "due_date": r.get("due_date"),
+                "type": r.get("type"),
+            }
+            for r in reminders
+        ],
+        "birthdays_today": birthdays,
+        "ripe_signals": ripe,
+        "debt_top": debt,
+        "stats": {
+            "reminders_due_count": len(reminders),
+            "birthdays_today_count": len(birthdays),
+            "ripe_count": len(ripe),
+            "debt_total_count": debt_total,
+        },
+        "brief_text": brief_text,
+    }
+
+
 def cmd_today(args: argparse.Namespace) -> Dict[str, object]:
     store = get_store()
     store.ensure()
@@ -4352,6 +4614,10 @@ def cmd_demo(args: argparse.Namespace) -> Dict[str, object]:
 def render_text(payload: Dict[str, object]) -> str:
     if not payload.get("ok"):
         return str(payload)
+    # `today-brief` pre-formats a Telegram-ready text block — use it directly
+    # so cron callers don't need to parse JSON.
+    if "brief_text" in payload:
+        return str(payload["brief_text"])
     if "message" in payload:
         lines = [str(payload["message"])]
         files = payload.get("files") or []
@@ -4517,6 +4783,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     today_p = sub.add_parser("today", help="Show due reminders and attention list")
     today_p.set_defaults(func=cmd_today)
+
+    today_brief_p = sub.add_parser(
+        "today-brief",
+        help="Morning brief composite: reminders due, birthdays today, ripe signals, debt. "
+             "Used by the 9am Telegram cron job. Use --format=text for Telegram-ready output.",
+    )
+    today_brief_p.set_defaults(func=cmd_today_brief)
 
     prep_p = sub.add_parser("prep", help="Prepare for a contact")
     prep_p.add_argument("--name", required=True)
