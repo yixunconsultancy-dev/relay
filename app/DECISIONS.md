@@ -364,3 +364,60 @@ get colors from `design.md`.
 - Python: **47** tests (was 46; added `test_concurrent_writes.py`)
 - Rust: **11** tests (unchanged)
 - TypeScript: **28** tests (was 0; vitest setup + two new test files)
+
+## Today screen visual refresh (2026-05-25)
+
+### Activity garden replaces 7-day heatmap
+
+Replaced `DailyScoreCard` (Material-style 7-cell heatmap row in the left
+half of the Today screen) with `GardenCard` — a full-width 14-day strip
+where each day is a linework-flowerbed PNG. Density tier is chosen from
+the day's touchpoint score (sparse / light / medium / busy / dense, 20
+PNG variants per tier, 100 total). Each day's variant is picked by
+hashing the date string so the same day always shows the same bed
+across renders.
+
+Why PNGs over SVG-procedural or CSS-procedural:
+
+- The brief was "linework tattoo flowers", which involves organic stem
+  curves, varying bud shapes per stem, and visible pen-pressure
+  variation. None of those are cheap to generate in SVG without it
+  looking algorithmic.
+- AI image gen produces 100 unique beds in one batch for ~$0; doing
+  the same procedurally would mean either looking samey or shipping a
+  bespoke generator.
+- Stored as transparent-background PNGs under
+  `app/public/garden/{bucket}/batch{N}_{bucket}_NN.png`. ~2.7 MB total,
+  shipped with the bundle.
+
+Dark mode: instead of generating a second batch with white ink, a CSS
+`filter: invert(1) brightness(0.92)` in `.dark-invert` flips the same
+PNGs to white-on-near-black. `brightness(0.92)` warms pure white down
+a hair toward the cream surface tone.
+
+Cell sizing: PNG aspect is 2:3 with flowers in roughly the bottom 35%
+of the canvas, so `object-cover` left ~70% of cell height as empty sky.
+Final approach: `h-28` cell + `overflow-hidden` + `transform: scale(2.4)
+origin-bottom` on the image. The flower portion zooms up to fill the
+cell, the transparent sky overflows above the visible area. Tradeoff:
+dense beds get more horizontal cropping (visible center ~40% of width),
+but the central cluster is where most flowers sit anyway.
+
+To revisit: regenerate the 100 PNGs with tighter framing (flowers in
+bottom 60% of canvas, not 35%) — the scale-transform crop wouldn't be
+needed and dense beds would show full-width. Until then the transform
+crop is the cheap fix.
+
+### Today-screen layout: garden at top, then 2-col grid
+
+Moved Quick Log out of the left column into the page header. The
+garden card now spans full width above a 2-col grid containing
+Reminders / Debt preview (left) and Ripe / Birthdays (right).
+
+### Test counts after this pass
+
+- Python: **64** tests (added clarifications, relationships, address
+  field, today-brief, source override)
+- Rust: **12** tests
+- TypeScript: **85** tests (added score, debt, ripe, birthdays, graph,
+  polling, mutations)

@@ -142,4 +142,16 @@
     @apply font-display text-4xl font-light text-gold leading-none;
     letter-spacing: -0.02em;
   }
+
+  /* Garden card PNG ink inversion for dark scheme. The 100 PNGs ship as
+     black ink on transparent background; in awm-dark we invert to white
+     so they read against the near-black surface. brightness(0.92) tones
+     the pure-white down a hair toward the warm-cream rest of the UI. */
+  .dark-invert {
+    /* light scheme: identity */
+    filter: none;
+  }
+  :root[data-scheme="awm-dark"] .dark-invert {
+    filter: invert(1) brightness(0.92);
+  }
 }

@@ -16,7 +16,7 @@ import {
   SENTIMENT_TONE,
 } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DailyScoreCard } from "@/components/daily-score-card";
+import { GardenCard } from "@/components/garden-card";
 import { QuickLogDialog } from "@/components/quick-log-dialog";
 import {
   useAllReminders,
@@ -145,21 +145,21 @@ export function HomeRoute() {
               {debt.length} debt item{debt.length === 1 ? "" : "s"}
             </p>
           </div>
-          <div className="flex items-end gap-3 flex-wrap">
-            <DailyScoreCard today={today} />
-            <Button
-              variant="gold"
-              size="md"
-              onClick={() => setQuickOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Quick log
-            </Button>
-          </div>
+          <Button
+            variant="gold"
+            size="md"
+            onClick={() => setQuickOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Quick log
+          </Button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto px-8 py-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+        <GardenCard today={today} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         <section>
           <h2 className="awm-label mb-3">Reminders due now</h2>
           {reminders.isPending ? (
@@ -431,6 +431,7 @@ export function HomeRoute() {
             </ul>
           )}
         </section>
+        </div>
       </div>
 
       <QuickLogDialog open={quickOpen} onOpenChange={setQuickOpen} />

@@ -100,8 +100,9 @@ On request or at start of day:
 - Flag repeated bottlenecks
 
 The desktop app's Today screen synthesises this automatically: daily
-activity score + 7-day heatmap, reminders due now, top relationship-debt
-items, ripe-to-reach-out signals, and birthdays this week. The Python
+activity score + 14-day activity garden (linework flowerbed PNGs whose
+density scales with touchpoints logged per day), reminders due now, top
+relationship-debt items, ripe-to-reach-out signals, and birthdays this week. The Python
 kit's `today-brief` command returns the same composite as JSON/text for
 delivery to Telegram via Hermes's `/cron` (see `MORNING_BRIEF_SETUP.md`).
 
@@ -185,7 +186,7 @@ App-level (`app/`):
 
 App routes (`app/src/routes/`):
 
-- `/` — Today: greeting, daily score + 7-day heatmap, reminders due, debt preview, ripe-to-reach-out, birthdays this week, today's logged touchpoints
+- `/` — Today: greeting, 14-day activity garden, reminders due, debt preview, ripe-to-reach-out, birthdays this week, today's logged touchpoints
 - `/contacts` — Contacts table with type/stage filters
 - `/contacts/:id` — Contact detail: editable profile, touchpoint timeline, policies, generated documents, family/relationships panel
 - `/graph` — Obsidian-style force-directed graph of contacts + ghost referrers

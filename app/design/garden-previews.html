@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Heatmap → Garden — three approaches</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Barlow:wght@400;500&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #FAF7F0;
+    color: #1B1B18;
+    font-family: 'Barlow', sans-serif;
+    padding: 40px 32px;
+  }
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: 36px;
+    color: #18231E;
+    margin-bottom: 8px;
+  }
+  .lede {
+    font-size: 14px;
+    color: #777064;
+    max-width: 700px;
+    margin-bottom: 40px;
+  }
+  .card {
+    background: #FFFFFF;
+    border: 1px solid #D8CDBA;
+    border-radius: 4px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+  }
+  .card-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #815D46;
+    margin-bottom: 4px;
+  }
+  .card-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: 22px;
+    color: #18231E;
+    margin-bottom: 8px;
+  }
+  .card-meta {
+    font-size: 12px;
+    color: #777064;
+    margin-bottom: 18px;
+  }
+  .note {
+    background: #F1E4BF40;
+    border-left: 3px solid #C6A34F;
+    padding: 12px 14px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: #4A473F;
+    line-height: 1.5;
+  }
+  .axis {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    margin-top: 8px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 9px;
+    color: #A49A8A;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  svg { display: block; }
+  details { margin-top: 14px; }
+  details summary {
+    cursor: pointer;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #815D46;
+    margin-bottom: 6px;
+  }
+  pre {
+    background: #F3EBDD;
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    border-radius: 3px;
+    color: #1B1B18;
+  }
+</style>
+</head>
+<body>
+
+<h1>Heatmap → Garden, three approaches</h1>
+<p class="lede">
+  Same 14 days of sample scores rendered three different ways. The
+  <strong>data</strong> is identical; the only thing changing is the
+  visual primitive vocabulary. Day 14 (rightmost) is "today" and gets a
+  gold accent line under its stem.
+</p>
+
+<!-- Path A -->
+<div class="card">
+  <div class="card-label">Path A · Hand-coded SVG primitives</div>
+  <div class="card-title">What I can ship today, ~1 hour</div>
+  <p class="card-meta">
+    6 primitive shapes (bud, sprig, daisy, leaf, rosette, tendril). Code
+    picks how many to render along each stem based on score (sqrt-scaled
+    so a 700-score day doesn't bury a 20-score day). Deterministic by
+    date — same day always looks the same. Reads as "stylized flower
+    icons growing on stems."
+  </p>
+  <svg id="path-a" width="720" height="180" viewBox="0 0 720 180"></svg>
+  <div class="axis" id="axis-a"></div>
+</div>
+
+<!-- Path B -->
+<div class="card">
+  <div class="card-label">Path B · With curated linework assets</div>
+  <div class="card-title">Target aesthetic, needs real assets</div>
+  <p class="card-meta">
+    This preview uses my best-effort attempt at more organic, less
+    geometric primitives — closer to what real linework tattoo flower
+    SVGs would look like. The actual aesthetic ceiling requires sourced
+    assets (CC-0 or commissioned). I've included a GPT image-gen prompt
+    below — you generate, I trace into SVGs and wire them up.
+  </p>
+  <svg id="path-b" width="720" height="180" viewBox="0 0 720 180"></svg>
+  <div class="axis" id="axis-b"></div>
+  <div class="note">
+    <strong>Honest read:</strong> my best-effort primitives still look
+    coded. The biggest jump in beauty would come from swapping these for
+    actual hand-drawn ink flowers. See the GPT prompt below.
+  </div>
+  <details>
+    <summary>GPT image-gen prompt (copy-paste into ChatGPT / GPT-Image)</summary>
+    <pre>Generate a set of 7 minimalist black linework tattoo flower and plant elements, arranged on a clean white background with 60px of whitespace between each. Each element must be drawable in 5-20 line segments — no shading, no fill, no color, no halftones. Pure black single-weight ink line art (~1.5pt stroke) on pure white.
+
+Elements needed (label each):
+1. "tiny-bud" — a single small closed bud at the tip of a 6mm stem (height ~15mm total)
+2. "sprig" — a slender stem with 3 small clustered petals at top, asymmetric (height ~22mm)
+3. "daisy" — a 6-petal wildflower with a small center dot, petals oval-shaped, NOT perfectly symmetric (width ~16mm)
+4. "leaf-pair" — two slender leaves on a thin stem, one slightly larger than the other (height ~20mm)
+5. "rosette" — a layered wildflower with ~8 visible petals at slightly varied angles, intentional negative space around the center (width ~22mm)
+6. "tendril" — a single thin curling line with a tiny coil at the tip (height ~14mm)
+7. "berries" — a cluster of 4-5 small filled circles with a small leaf, like bramble berries (width ~14mm)
+
+Style references: Hannah Snowdon micro-tattoos, single-needle botanical line tattoos, Pinterest "minimalist linework flower tattoo". Each element should feel hand-drawn (not perfectly symmetric, slight line weight variation OK) but use a single consistent black stroke color.
+
+Output: one PNG with all 7 elements clearly separated and labeled. Each element must be self-contained for easy extraction.</pre>
+  </details>
+</div>
+
+<!-- Path C -->
+<div class="card">
+  <div class="card-label">Path C · Pure procedural bezier</div>
+  <div class="card-title">Code-generated petals, no asset library</div>
+  <p class="card-meta">
+    Every petal a bezier curve, every position seeded by date. Infinite
+    variation, no two days identical. Tends to read as "fractal" or
+    "math-art" rather than "ink." Included for honest comparison —
+    likely the worst option for the aesthetic you want.
+  </p>
+  <svg id="path-c" width="720" height="180" viewBox="0 0 720 180"></svg>
+  <div class="axis" id="axis-c"></div>
+</div>
+
+<script>
+// ─── Shared data + layout ────────────────────────────────────────
+const W = 720, H = 180, COLS = 14, COL_W = W / COLS;
+const STEM_BASE_Y = H - 24;
+const STEM_TOP_Y = 20;
+const STEM_HEIGHT = STEM_BASE_Y - STEM_TOP_Y;
+const SCORES = [0, 30, 10, 80, 20, 0, 40, 60, 0, 50, 20, 70, 30, 20];
+const TODAY = COLS - 1;
+const INK = "#1B1B18";
+const GOLD = "#C6A34F";
+
+function densityFor(score) {
+  if (score < 10) return 0;
+  if (score < 20) return 1;
+  if (score < 40) return 2 + (score % 10 >= 5 ? 1 : 0);
+  if (score < 60) return 4;
+  if (score < 80) return 5;
+  return 6 + Math.floor((score - 80) / 20);
+}
+
+// Deterministic pseudo-random in [-1, 1], seeded by integer.
+function rand(seed) {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return ((x - Math.floor(x)) - 0.5) * 2;
+}
+
+function el(tag, attrs, children) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (children) for (const c of children) e.appendChild(c);
+  return e;
+}
+
+function dayLabel(idx) {
+  if (idx === TODAY) return "today";
+  if (idx === TODAY - 1) return "yest";
+  return "-" + (TODAY - idx) + "d";
+}
+
+function drawAxis(id) {
+  const a = document.getElementById(id);
+  for (let i = 0; i < COLS; i++) {
+    const s = document.createElement("span");
+    s.textContent = SCORES[i] || "0";
+    if (i === TODAY) s.style.color = "#815D46";
+    a.appendChild(s);
+  }
+}
+
+// ─── Stem helper (shared) ────────────────────────────────────────
+function drawStem(svg, col, score, opts) {
+  const x = col * COL_W + COL_W / 2;
+  const isToday = col === TODAY;
+  const curve = rand(col * 7) * 5; // gentle horizontal sway
+  const baseStroke = opts.strokeWidth || 1.2;
+  const stemPath = `M ${x},${STEM_BASE_Y}
+                    Q ${x + curve},${(STEM_BASE_Y + STEM_TOP_Y) / 2}
+                      ${x + curve * 0.3},${STEM_TOP_Y + (10 - densityFor(score))}`;
+  svg.appendChild(el("path", {
+    d: stemPath,
+    stroke: INK, fill: "none",
+    "stroke-width": baseStroke,
+    "stroke-linecap": "round",
+  }));
+  // Today indicator: gold underscore beneath the stem
+  if (isToday) {
+    svg.appendChild(el("line", {
+      x1: x - 12, y1: STEM_BASE_Y + 6,
+      x2: x + 12, y2: STEM_BASE_Y + 6,
+      stroke: GOLD, "stroke-width": 2, "stroke-linecap": "round",
+    }));
+  }
+  // Ground tick
+  svg.appendChild(el("line", {
+    x1: x - 6, y1: STEM_BASE_Y, x2: x + 6, y2: STEM_BASE_Y,
+    stroke: INK, "stroke-width": 0.8, "stroke-linecap": "round",
+  }));
+  return { x, curve };
+}
+
+// ─── PATH A: hand-coded primitives ───────────────────────────────
+const PATH_A = {
+  bud: (x, y) => [el("circle", { cx: x, cy: y, r: 1.6, fill: INK })],
+  sprig3: (x, y) => {
+    const g = [];
+    for (let i = -1; i <= 1; i++) {
+      g.push(el("ellipse", {
+        cx: x + i * 2.5, cy: y - 1.5,
+        rx: 1.2, ry: 2.4,
+        fill: "none", stroke: INK, "stroke-width": 0.9,
+        transform: `rotate(${i * 30} ${x} ${y})`,
+      }));
+    }
+    g.push(el("circle", { cx: x, cy: y, r: 0.7, fill: INK }));
+    return g;
+  },
+  daisy: (x, y) => {
+    const g = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i * 360 / 5) - 90;
+      const dx = Math.cos(a * Math.PI / 180) * 2.8;
+      const dy = Math.sin(a * Math.PI / 180) * 2.8;
+      g.push(el("ellipse", {
+        cx: x + dx, cy: y + dy,
+        rx: 1.2, ry: 2.4,
+        fill: "none", stroke: INK, "stroke-width": 0.9,
+        transform: `rotate(${a + 90} ${x + dx} ${y + dy})`,
+      }));
+    }
+    g.push(el("circle", { cx: x, cy: y, r: 1, fill: INK }));
+    return g;
+  },
+  leaf: (x, y) => [
+    el("path", {
+      d: `M ${x},${y} Q ${x - 3},${y - 2} ${x},${y - 6} Q ${x + 3},${y - 2} ${x},${y} Z`,
+      fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+    }),
+    el("path", {
+      d: `M ${x},${y - 1} L ${x},${y - 5}`,
+      stroke: INK, "stroke-width": 0.5,
+    }),
+  ],
+  rosette: (x, y) => {
+    const g = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i * 360 / 8) - 90;
+      const dx = Math.cos(a * Math.PI / 180) * 3.4;
+      const dy = Math.sin(a * Math.PI / 180) * 3.4;
+      g.push(el("ellipse", {
+        cx: x + dx, cy: y + dy,
+        rx: 1.3, ry: 3,
+        fill: "none", stroke: INK, "stroke-width": 0.9,
+        transform: `rotate(${a + 90} ${x + dx} ${y + dy})`,
+      }));
+    }
+    g.push(el("circle", { cx: x, cy: y, r: 1.3, fill: INK }));
+    return g;
+  },
+};
+
+const A_KINDS = ["bud", "sprig3", "daisy", "leaf", "rosette"];
+
+(function renderPathA() {
+  const svg = document.getElementById("path-a");
+  for (let col = 0; col < COLS; col++) {
+    const score = SCORES[col];
+    const { x, curve } = drawStem(svg, col, score, {});
+    const n = densityFor(score);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 1) / (n + 1);
+      const yPos = STEM_BASE_Y - t * STEM_HEIGHT * 0.95;
+      const xOffset = rand(col * 31 + i * 7) * 6 + curve * (1 - t);
+      const kindIdx = Math.floor(((rand(col * 13 + i * 19) + 1) / 2) * A_KINDS.length);
+      const kind = A_KINDS[Math.min(kindIdx, A_KINDS.length - 1)];
+      const nodes = PATH_A[kind](x + xOffset, yPos);
+      for (const n2 of nodes) svg.appendChild(n2);
+    }
+  }
+  drawAxis("axis-a");
+})();
+
+// ─── PATH B: best-effort "linework tattoo" mimic ─────────────────
+const PATH_B = {
+  wildflower: (x, y) => {
+    // 6 thin curved petals, slightly varied
+    const g = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i * 60 + rand(i * 5) * 8) * Math.PI / 180;
+      const len = 4 + rand(i * 11) * 0.8;
+      g.push(el("path", {
+        d: `M ${x},${y}
+            Q ${x + Math.cos(a) * len * 0.4 - Math.sin(a) * 1.5},${y + Math.sin(a) * len * 0.4 + Math.cos(a) * 1.5}
+              ${x + Math.cos(a) * len},${y + Math.sin(a) * len}
+            Q ${x + Math.cos(a) * len * 0.4 + Math.sin(a) * 1.5},${y + Math.sin(a) * len * 0.4 - Math.cos(a) * 1.5}
+              ${x},${y}`,
+        fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+      }));
+    }
+    g.push(el("circle", { cx: x, cy: y, r: 0.9, fill: INK }));
+    return g;
+  },
+  sprigLeaves: (x, y) => [
+    // Stem with 2 leaves
+    el("path", {
+      d: `M ${x},${y + 4} Q ${x + 1},${y - 2} ${x},${y - 6}`,
+      fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+    }),
+    el("path", {
+      d: `M ${x},${y} Q ${x - 3.5},${y - 1} ${x - 4.5},${y - 3.5}`,
+      fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+    }),
+    el("path", {
+      d: `M ${x},${y - 2.5} Q ${x + 3.5},${y - 3.5} ${x + 4.5},${y - 6}`,
+      fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+    }),
+    el("circle", { cx: x, cy: y - 7, r: 1.2, fill: INK }),
+  ],
+  berries: (x, y) => {
+    const g = [];
+    const positions = [[0, 0], [-2, -1], [2, -1.5], [0, -3], [-1, -4]];
+    for (const [dx, dy] of positions) {
+      g.push(el("circle", { cx: x + dx, cy: y + dy, r: 1.2, fill: INK }));
+    }
+    return g;
+  },
+  fernFrond: (x, y) => {
+    const g = [];
+    // Central curve
+    g.push(el("path", {
+      d: `M ${x},${y + 4} Q ${x + 2},${y - 1} ${x - 1},${y - 6}`,
+      fill: "none", stroke: INK, "stroke-width": 0.9, "stroke-linecap": "round",
+    }));
+    // Side leaflets
+    for (let i = 0; i < 4; i++) {
+      const yPos = y + 3 - i * 2.5;
+      const side = i % 2 === 0 ? -1 : 1;
+      g.push(el("path", {
+        d: `M ${x + (i * 0.3 * side)},${yPos} q ${side * 2},${-0.5} ${side * 3},${-1.5}`,
+        fill: "none", stroke: INK, "stroke-width": 0.7, "stroke-linecap": "round",
+      }));
+    }
+    return g;
+  },
+  tendril: (x, y) => [
+    el("path", {
+      d: `M ${x},${y + 4} Q ${x + 3},${y} ${x - 1},${y - 3} Q ${x - 3},${y - 5} ${x + 1},${y - 6}`,
+      fill: "none", stroke: INK, "stroke-width": 0.85, "stroke-linecap": "round",
+    }),
+  ],
+};
+const B_KINDS = ["wildflower", "sprigLeaves", "berries", "fernFrond", "tendril"];
+
+(function renderPathB() {
+  const svg = document.getElementById("path-b");
+  for (let col = 0; col < COLS; col++) {
+    const score = SCORES[col];
+    const { x, curve } = drawStem(svg, col, score, { strokeWidth: 1.1 });
+    const n = densityFor(score);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 1) / (n + 1);
+      const yPos = STEM_BASE_Y - t * STEM_HEIGHT * 0.95;
+      const xOffset = rand(col * 17 + i * 5) * 7 + curve * (1 - t);
+      const kindIdx = Math.floor(((rand(col * 23 + i * 11) + 1) / 2) * B_KINDS.length);
+      const kind = B_KINDS[Math.min(kindIdx, B_KINDS.length - 1)];
+      const nodes = PATH_B[kind](x + xOffset, yPos);
+      for (const n2 of nodes) svg.appendChild(n2);
+    }
+  }
+  drawAxis("axis-b");
+})();
+
+// ─── PATH C: pure procedural bezier ──────────────────────────────
+function renderProceduralBloom(svg, x, y, seed) {
+  // Number of petals 4-7, each a bezier-curved teardrop
+  const petalCount = 4 + Math.floor(((rand(seed) + 1) / 2) * 4);
+  for (let i = 0; i < petalCount; i++) {
+    const a = (i * 360 / petalCount + rand(seed + i * 3) * 15) * Math.PI / 180;
+    const len = 3 + rand(seed + i * 7) * 2;
+    const wide = 1 + rand(seed + i * 11) * 0.5;
+    const tipX = x + Math.cos(a) * len;
+    const tipY = y + Math.sin(a) * len;
+    const ctrlAOffsetX = -Math.sin(a) * wide;
+    const ctrlAOffsetY = Math.cos(a) * wide;
+    svg.appendChild(el("path", {
+      d: `M ${x},${y}
+          Q ${x + ctrlAOffsetX + Math.cos(a) * len * 0.5},${y + ctrlAOffsetY + Math.sin(a) * len * 0.5}
+            ${tipX},${tipY}
+          Q ${x - ctrlAOffsetX + Math.cos(a) * len * 0.5},${y - ctrlAOffsetY + Math.sin(a) * len * 0.5}
+            ${x},${y}`,
+      fill: "none", stroke: INK, "stroke-width": 0.8, "stroke-linecap": "round",
+    }));
+  }
+  svg.appendChild(el("circle", { cx: x, cy: y, r: 1.1, fill: INK }));
+}
+
+(function renderPathC() {
+  const svg = document.getElementById("path-c");
+  for (let col = 0; col < COLS; col++) {
+    const score = SCORES[col];
+    const { x, curve } = drawStem(svg, col, score, {});
+    const n = densityFor(score);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 1) / (n + 1);
+      const yPos = STEM_BASE_Y - t * STEM_HEIGHT * 0.95;
+      const xOffset = rand(col * 41 + i * 13) * 7 + curve * (1 - t);
+      renderProceduralBloom(svg, x + xOffset, yPos, col * 100 + i * 17);
+    }
+  }
+  drawAxis("axis-c");
+})();
+</script>
+
+</body>
+</html>

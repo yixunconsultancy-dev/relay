@@ -48,14 +48,17 @@ export interface HeatmapCell {
   isToday: boolean;
 }
 
-/** Return 7 cells, oldest first, ending on `today`. */
+/** Return N cells, oldest first, ending on `today`. Default 7 for
+ *  backward compatibility with the original score card; the garden
+ *  card calls it with 14. */
 export function compute7DayHeatmap(
   touchpoints: TouchpointRow[],
-  today: string
+  today: string,
+  days: number = 7
 ): HeatmapCell[] {
   const cells: HeatmapCell[] = [];
   const todayDate = new Date(today + "T00:00:00");
-  for (let i = 6; i >= 0; i--) {
+  for (let i = days - 1; i >= 0; i--) {
     const d = new Date(todayDate);
     d.setDate(d.getDate() - i);
     const iso = isoDate(d);

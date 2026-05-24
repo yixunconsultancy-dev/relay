@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Garden v2 — 21 elements, multi-stem planting</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Barlow:wght@400;500&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #FAF7F0;
+    color: #1B1B18;
+    font-family: 'Barlow', sans-serif;
+    padding: 40px 32px;
+  }
+  h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    font-size: 36px;
+    color: #18231E;
+    margin-bottom: 8px;
+  }
+  .lede { font-size: 14px; color: #777064; max-width: 760px; margin-bottom: 32px; }
+  .card {
+    background: #FFFFFF;
+    border: 1px solid #D8CDBA;
+    border-radius: 4px;
+    padding: 28px 32px;
+    margin-bottom: 32px;
+  }
+  .card-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #815D46; margin-bottom: 4px;
+  }
+  .card-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400; font-size: 22px;
+    color: #18231E; margin-bottom: 6px;
+  }
+  .card-sub { font-size: 12px; color: #777064; margin-bottom: 20px; }
+  .axis {
+    display: grid; grid-template-columns: repeat(14, 1fr);
+    margin-top: 8px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 9px; color: #A49A8A;
+    text-align: center; text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  svg { display: block; }
+  .palette {
+    background: #FFFFFF;
+    border: 1px solid #D8CDBA;
+    border-radius: 4px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+  }
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 16px 24px;
+    margin-top: 16px;
+  }
+  .palette-item {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 6px;
+    color: #1B1B18;
+  }
+  .palette-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 10px; color: #777064;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .dark-card {
+    background: #050505;
+    color: #F5F1E8;
+  }
+  .dark-card .card-title { color: #F5F1E8; }
+  .dark-card .card-label { color: #DDB966; }
+  .dark-card .card-sub { color: #A6A6A6; }
+  .dark-card .axis { color: #6F6F6F; }
+</style>
+</head>
+<body>
+
+<h1>Garden v2 — 21 element vocabulary, multi-stem days</h1>
+<p class="lede">
+  Each day column is a planting bed. Score determines how many elements
+  get planted (0 = bare ground, 5+ = busy). Element choice is
+  deterministic (seeded by date), so the same day always looks the same.
+  All elements use <code>currentColor</code> so they recolor cleanly for
+  dark mode (last card on this page).
+</p>
+
+<!-- The 21-element palette -->
+<div class="palette">
+  <div class="card-label">Element palette · 21 primitives</div>
+  <div class="card-title">Hand-coded approximations of the Codex-generated assets</div>
+  <p class="card-sub">
+    Each is a self-contained SVG (~20×35px). Variants (a/b suffix) give
+    visual differentiation between adjacent days with similar scores.
+  </p>
+  <div class="palette-grid" id="palette-grid"></div>
+</div>
+
+<!-- Light scheme garden -->
+<div class="card">
+  <div class="card-label">Garden · light scheme</div>
+  <div class="card-title">14 days, multi-stem composition</div>
+  <p class="card-sub">
+    Sample scores: <code>[0, 30, 10, 80, 20, 0, 40, 60, 0, 50, 20, 70, 30, 20]</code>.
+    Day 14 (today) marked with a gold ground-tick.
+  </p>
+  <svg id="garden-light" width="720" height="200" viewBox="0 0 720 200" style="color: #18231E;"></svg>
+  <div class="axis" id="axis-light"></div>
+</div>
+
+<!-- Dark scheme garden -->
+<div class="card dark-card">
+  <div class="card-label">Garden · dark scheme</div>
+  <div class="card-title">Same composition, recolored via currentColor</div>
+  <p class="card-sub">
+    Same 14 days. Dark cream ink (#F5F1E8) on true-black. Today
+    highlighted with gold.
+  </p>
+  <svg id="garden-dark" width="720" height="200" viewBox="0 0 720 200" style="color: #F5F1E8;"></svg>
+  <div class="axis" id="axis-dark"></div>
+</div>
+
+<script>
+// ─── 21 element primitives ──────────────────────────────────────
+// Each function returns an SVG <g> string with paths anchored at
+// (0, 0) at the BASE (where it touches the ground), growing upward
+// in the -y direction.
+
+const stroke = (d, w=1) => `<path d="${d}" stroke="currentColor" stroke-width="${w}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+const fill = (d) => `<path d="${d}" fill="currentColor" stroke="none"/>`;
+const dot = (cx, cy, r) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="currentColor"/>`;
+const circle = (cx, cy, r, w=1) => `<circle cx="${cx}" cy="${cy}" r="${r}" stroke="currentColor" stroke-width="${w}" fill="none"/>`;
+
+const ELEMENTS = {
+  "tiny-bud-a": { w: 8, h: 22, render: () => `
+    <g>
+      ${stroke("M 0,0 L 0,-15")}
+      ${stroke("M -2.5,-15 Q -2.5,-19 0,-21 Q 2.5,-19 2.5,-15 Z")}
+      ${stroke("M -1,-15 L -1,-19", 0.6)}
+      ${stroke("M 1,-15 L 1,-19", 0.6)}
+    </g>`,
+  },
+  "tiny-bud-b": { w: 8, h: 22, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 2,-7 0,-14")}
+      ${stroke("M -2.5,-14 Q -2.5,-18 0,-20 Q 2.5,-18 2.5,-14 Z")}
+    </g>`,
+  },
+  "sprig-a": { w: 14, h: 32, render: () => `
+    <g>
+      ${stroke("M 0,0 L 0,-22")}
+      ${stroke("M 0,-22 Q -4,-22 -5,-26 Q -5,-30 -2,-30 Q 0,-28 0,-24")}
+      ${stroke("M 0,-22 Q 4,-22 5,-26 Q 5,-30 2,-30 Q 0,-28 0,-24")}
+      ${stroke("M 0,-22 Q -2,-26 0,-30 Q 2,-26 0,-22")}
+    </g>`,
+  },
+  "sprig-b": { w: 14, h: 32, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 1,-10 0,-22")}
+      ${stroke("M 0,-22 Q -3,-24 -5,-28 Q -2,-30 0,-26")}
+      ${stroke("M 0,-22 Q 3,-24 5,-28 Q 2,-30 0,-26")}
+      ${stroke("M 0,-22 Q -2,-28 0,-32 Q 2,-28 0,-22")}
+    </g>`,
+  },
+  "daisy-a": { w: 20, h: 26, render: () => {
+    const petals = [];
+    for (let i = 0; i < 6; i++) {
+      const a = i * 60 - 90;
+      const ax = Math.cos(a * Math.PI / 180);
+      const ay = Math.sin(a * Math.PI / 180);
+      const cx = ax * 5, cy = -13 + ay * 5;
+      petals.push(`<ellipse cx="${cx}" cy="${cy}" rx="2" ry="4.5" transform="rotate(${a + 90} ${cx} ${cy})" stroke="currentColor" stroke-width="1" fill="none"/>`);
+    }
+    return `<g>
+      ${stroke("M 0,0 L 0,-8")}
+      ${petals.join("")}
+      ${dot(0, -13, 1.5)}
+    </g>`;
+  }},
+  "daisy-b": { w: 16, h: 26, render: () => {
+    const petals = [];
+    for (let i = 0; i < 5; i++) {
+      const a = i * 72 - 90;
+      const ax = Math.cos(a * Math.PI / 180);
+      const ay = Math.sin(a * Math.PI / 180);
+      const cx = 0 + ax * 4, cy = -16 + ay * 4;
+      petals.push(`<ellipse cx="${cx}" cy="${cy}" rx="1.8" ry="3.6" transform="rotate(${a + 90} ${cx} ${cy})" stroke="currentColor" stroke-width="1" fill="none"/>`);
+    }
+    return `<g>
+      ${stroke("M 0,0 L 0,-12")}
+      ${stroke("M 0,-7 Q 4,-7 5,-10")}
+      ${petals.join("")}
+      ${circle(0, -16, 1.2)}
+    </g>`;
+  }},
+  "leaf-pair": { w: 14, h: 24, render: () => `
+    <g>
+      ${stroke("M 0,0 L 0,-18")}
+      ${stroke("M 0,-10 Q 5,-12 6,-18 Q 3,-17 0,-14 Z")}
+      ${stroke("M 0,-7 Q -4,-9 -5,-14 Q -3,-13 0,-10")}
+      ${stroke("M 0,-10 L 4,-15", 0.5)}
+      ${stroke("M 0,-7 L -2.5,-11", 0.5)}
+    </g>`,
+  },
+  "rosette-a": { w: 22, h: 22, render: () => {
+    const inner = [], outer = [];
+    for (let i = 0; i < 8; i++) {
+      const a = i * 45 - 90;
+      const ax = Math.cos(a * Math.PI / 180);
+      const ay = Math.sin(a * Math.PI / 180);
+      const ox = ax * 7.5, oy = -10 + ay * 7.5;
+      outer.push(`<ellipse cx="${ox}" cy="${oy}" rx="2.2" ry="5" transform="rotate(${a + 90} ${ox} ${oy})" stroke="currentColor" stroke-width="1" fill="none"/>`);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = i * 60 - 60;
+      const ax = Math.cos(a * Math.PI / 180);
+      const ay = Math.sin(a * Math.PI / 180);
+      const cx = ax * 3, cy = -10 + ay * 3;
+      inner.push(`<ellipse cx="${cx}" cy="${cy}" rx="1.5" ry="3" transform="rotate(${a + 90} ${cx} ${cy})" stroke="currentColor" stroke-width="1" fill="none"/>`);
+    }
+    return `<g>
+      ${outer.join("")}
+      ${inner.join("")}
+      ${circle(0, -10, 1.5)}
+    </g>`;
+  }},
+  "rosette-b": { w: 20, h: 22, render: () => {
+    const petals = [];
+    for (let i = 0; i < 10; i++) {
+      const a = i * 36 - 90;
+      const ax = Math.cos(a * Math.PI / 180);
+      const ay = Math.sin(a * Math.PI / 180);
+      const cx = ax * 6, cy = -10 + ay * 6;
+      petals.push(`<ellipse cx="${cx}" cy="${cy}" rx="1.8" ry="4.5" transform="rotate(${a + 90} ${cx} ${cy})" stroke="currentColor" stroke-width="1" fill="none"/>`);
+    }
+    return `<g>
+      ${petals.join("")}
+      ${dot(0, -10, 1.8)}
+    </g>`;
+  }},
+  "tendril-a": { w: 8, h: 24, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 2,-8 -1,-14 Q -3,-18 0,-20 Q 3,-21 2,-23")}
+    </g>`,
+  },
+  "tendril-b": { w: 8, h: 24, render: () => `
+    <g>
+      ${stroke("M 0,0 Q -2,-6 1,-12 Q 4,-16 -1,-19 Q -3,-21 0,-22")}
+    </g>`,
+  },
+  "berries-a": { w: 16, h: 22, render: () => `
+    <g>
+      ${stroke("M 0,0 L 2,-12")}
+      ${stroke("M 2,-12 Q 6,-14 7,-18 Q 4,-17 2,-14")}
+      ${dot(-3, -16, 1.6)}
+      ${dot(-1, -19, 1.6)}
+      ${dot(-5, -19, 1.6)}
+      ${dot(-3, -22, 1.6)}
+    </g>`,
+  },
+  "berries-b": { w: 18, h: 22, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 1,-8 -1,-14")}
+      ${stroke("M -1,-14 Q -5,-15 -7,-18 Q -4,-16 -1,-14")}
+      ${dot(2, -14, 1.5)}
+      ${dot(5, -15, 1.5)}
+      ${dot(3, -18, 1.5)}
+      ${dot(7, -18, 1.5)}
+      ${dot(5, -21, 1.5)}
+    </g>`,
+  },
+  "lavender": { w: 10, h: 36, render: () => {
+    const buds = [];
+    for (let i = 0; i < 6; i++) {
+      const y = -22 - i * 2.5;
+      const off = (i % 2 === 0) ? -2 : 2;
+      buds.push(`<ellipse cx="${off * 0.7}" cy="${y}" rx="1.3" ry="2" stroke="currentColor" stroke-width="0.9" fill="none"/>`);
+    }
+    return `<g>
+      ${stroke("M 0,0 L 0,-22")}
+      ${stroke("M 0,-10 Q -3,-12 -4,-14")}
+      ${stroke("M 0,-14 Q 3,-16 4,-18")}
+      ${buds.join("")}
+      ${stroke("M 0,-22 L 0,-36", 0.7)}
+    </g>`;
+  }},
+  "fern": { w: 14, h: 32, render: () => {
+    const leaflets = [];
+    for (let i = 0; i < 6; i++) {
+      const y = -4 - i * 4;
+      const sz = 4 - i * 0.4;
+      leaflets.push(stroke(`M 0,${y} Q -${sz},${y - 1} -${sz + 1},${y - 3}`, 0.8));
+      leaflets.push(stroke(`M 0,${y - 1} Q ${sz},${y - 2} ${sz + 1},${y - 4}`, 0.8));
+    }
+    return `<g>
+      ${stroke("M 0,0 Q 0,-15 0,-30")}
+      ${leaflets.join("")}
+    </g>`;
+  }},
+  "eucalyptus": { w: 14, h: 30, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 2,-10 -1,-22")}
+      ${circle(-3, -22, 2.5)}
+      ${circle(2, -18, 2.5)}
+      ${circle(-1, -26, 2.5)}
+      ${circle(4, -24, 2)}
+    </g>`,
+  },
+  "clover": { w: 14, h: 22, render: () => `
+    <g>
+      ${stroke("M 0,0 L 0,-12")}
+      ${stroke("M 0,-12 Q -5,-12 -5,-16 Q -2,-19 0,-15 Z")}
+      ${stroke("M 0,-12 Q 5,-12 5,-16 Q 2,-19 0,-15 Z")}
+      ${stroke("M 0,-15 Q -3,-19 0,-22 Q 3,-19 0,-15 Z")}
+    </g>`,
+  },
+  "seedpod": { w: 8, h: 26, render: () => `
+    <g>
+      ${stroke("M 0,0 L 0,-18")}
+      ${stroke("M -2.5,-18 Q -2.5,-23 0,-24 Q 2.5,-23 2.5,-18 Z")}
+      ${stroke("M -1.5,-24 L 1.5,-24", 0.7)}
+      ${stroke("M 0,-24 L 0,-25.5", 0.7)}
+    </g>`,
+  },
+  "grass": { w: 14, h: 24, render: () => `
+    <g>
+      ${stroke("M -3,0 Q -3.5,-10 -5,-20")}
+      ${stroke("M 0,0 Q 0,-12 1,-22")}
+      ${stroke("M 3,0 Q 4,-9 6,-18")}
+      ${stroke("M -1,0 Q -1,-7 -2,-14", 0.7)}
+    </g>`,
+  },
+  "wheat": { w: 12, h: 32, render: () => {
+    const grains = [];
+    for (let i = 0; i < 5; i++) {
+      const y = -18 - i * 2.5;
+      grains.push(`<ellipse cx="-1.5" cy="${y}" rx="1.5" ry="2.5" transform="rotate(-20 -1.5 ${y})" stroke="currentColor" stroke-width="0.7" fill="none"/>`);
+      grains.push(`<ellipse cx="1.5" cy="${y - 1}" rx="1.5" ry="2.5" transform="rotate(20 1.5 ${y - 1})" stroke="currentColor" stroke-width="0.7" fill="none"/>`);
+    }
+    return `<g>
+      ${stroke("M 0,0 L 0,-18")}
+      ${grains.join("")}
+      ${stroke("M 0,-30 L 0,-32", 0.5)}
+    </g>`;
+  }},
+  "poppy-pod": { w: 10, h: 26, render: () => `
+    <g>
+      ${stroke("M 0,0 Q 1,-8 0,-16")}
+      ${stroke("M -3,-16 Q -3,-21 0,-22 Q 3,-21 3,-16 Z")}
+      ${stroke("M -2.5,-22 Q -1.5,-23.5 0,-23 Q 1.5,-23.5 2.5,-22", 0.7)}
+      ${stroke("M -2,-23 L -2.5,-25", 0.6)}
+      ${stroke("M 0,-23 L 0,-25.5", 0.6)}
+      ${stroke("M 2,-23 L 2.5,-25", 0.6)}
+    </g>`,
+  },
+};
+
+const ALL_KEYS = Object.keys(ELEMENTS);
+
+// ─── Element selection per score tier ──────────────────────────
+// Low scores favour subtle elements (tendrils, grass, buds).
+// High scores invite bigger blooms (rosette, daisy, lavender).
+const TIER_LOW = ["tiny-bud-a", "tiny-bud-b", "tendril-a", "tendril-b", "grass", "clover", "seedpod"];
+const TIER_MID = ["sprig-a", "sprig-b", "leaf-pair", "daisy-b", "eucalyptus", "poppy-pod", "berries-a", "berries-b"];
+const TIER_HIGH = ["daisy-a", "rosette-a", "rosette-b", "lavender", "wheat", "fern"];
+
+function tierFor(score) {
+  if (score < 25) return TIER_LOW;
+  if (score < 60) return TIER_MID;
+  return TIER_HIGH;
+}
+
+function stemCountFor(score) {
+  if (score === 0) return 0;
+  if (score < 10) return 1;
+  if (score < 25) return 1 + (score > 15 ? 1 : 0);
+  if (score < 45) return 2;
+  if (score < 65) return 3;
+  if (score < 85) return 4;
+  return 5;
+}
+
+function rand(seed) {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return (x - Math.floor(x)) - 0.5;
+}
+
+function pickElements(col, score) {
+  const n = stemCountFor(score);
+  const picks = [];
+  for (let i = 0; i < n; i++) {
+    // Each plant has a chance to draw from any tier, weighted toward the
+    // tier matching the score. We still pick one element per stem; the
+    // tier choice gives variety so a busy day isn't 5 identical rosettes.
+    const r = (rand(col * 73 + i * 13) + 0.5);
+    let pool;
+    if (score >= 60) {
+      pool = r > 0.6 ? TIER_HIGH : (r > 0.25 ? TIER_MID : TIER_LOW);
+    } else if (score >= 25) {
+      pool = r > 0.7 ? TIER_HIGH : (r > 0.3 ? TIER_MID : TIER_LOW);
+    } else {
+      pool = r > 0.85 ? TIER_MID : TIER_LOW;
+    }
+    const keyIdx = Math.floor(((rand(col * 41 + i * 19) + 0.5)) * pool.length);
+    picks.push(pool[Math.min(keyIdx, pool.length - 1)]);
+  }
+  return picks;
+}
+
+// ─── Layout ────────────────────────────────────────────────────
+const W = 720, H = 200, COLS = 14, COL_W = W / COLS;
+const GROUND_Y = H - 18;
+const SCORES = [0, 30, 10, 80, 20, 0, 40, 60, 0, 50, 20, 70, 30, 20];
+const TODAY = COLS - 1;
+
+function buildGarden() {
+  let svg = "";
+  // Ground line
+  svg += `<line x1="0" y1="${GROUND_Y}" x2="${W}" y2="${GROUND_Y}" stroke="currentColor" stroke-width="0.5" opacity="0.3"/>`;
+  for (let col = 0; col < COLS; col++) {
+    const score = SCORES[col];
+    const xCenter = col * COL_W + COL_W / 2;
+    const elements = pickElements(col, score);
+    // Distribute element x positions across the column width
+    const innerWidth = COL_W * 0.75;
+    elements.forEach((key, i) => {
+      const el = ELEMENTS[key];
+      let xOffset;
+      if (elements.length === 1) {
+        xOffset = rand(col * 11) * 4;
+      } else {
+        const slot = (i + 0.5) / elements.length - 0.5;
+        xOffset = slot * innerWidth + rand(col * 17 + i * 5) * 3;
+      }
+      const x = xCenter + xOffset;
+      svg += `<g transform="translate(${x.toFixed(2)}, ${GROUND_Y})">${el.render()}</g>`;
+    });
+    // Today indicator
+    if (col === TODAY) {
+      svg += `<line x1="${xCenter - 14}" y1="${GROUND_Y + 8}" x2="${xCenter + 14}" y2="${GROUND_Y + 8}" stroke="#C6A34F" stroke-width="2.5" stroke-linecap="round"/>`;
+    }
+  }
+  return svg;
+}
+
+function drawAxis(id) {
+  const a = document.getElementById(id);
+  for (let i = 0; i < COLS; i++) {
+    const s = document.createElement("span");
+    s.textContent = SCORES[i] || "·";
+    if (i === TODAY) s.style.color = "#815D46";
+    a.appendChild(s);
+  }
+}
+
+// Render
+document.getElementById("garden-light").innerHTML = buildGarden();
+document.getElementById("garden-dark").innerHTML = buildGarden();
+drawAxis("axis-light");
+drawAxis("axis-dark");
+
+// Render palette
+const pal = document.getElementById("palette-grid");
+for (const key of ALL_KEYS) {
+  const el = ELEMENTS[key];
+  const wrap = document.createElement("div");
+  wrap.className = "palette-item";
+  wrap.innerHTML = `
+    <svg width="${el.w + 8}" height="${el.h + 4}" viewBox="${-(el.w + 8)/2} ${-(el.h + 2)} ${el.w + 8} ${el.h + 4}">
+      <g transform="translate(0, 0)">${el.render()}</g>
+    </svg>
+    <div class="palette-label">${key}</div>
+  `;
+  pal.appendChild(wrap);
+}
+</script>
+
+</body>
+</html>
