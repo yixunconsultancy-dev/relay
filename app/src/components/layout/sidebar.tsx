@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Activity,
+  AlertTriangle,
   Sun,
   Users,
   Bell,
@@ -15,6 +17,12 @@ import {
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/format";
 import { useSyncStatus } from "@/lib/sync-status";
+import {
+  useAllReminders,
+  useAllTouchpoints,
+  useContacts,
+} from "@/lib/queries";
+import { computeDebt } from "@/lib/debt";
 
 interface NavItem {
   to: string;
@@ -27,14 +35,33 @@ const NAV: NavItem[] = [
   { to: "/", label: "Today", icon: Sun, enabled: true },
   { to: "/contacts", label: "Contacts", icon: Users, enabled: true },
   { to: "/reminders", label: "Reminders", icon: Bell, enabled: true },
+  { to: "/debt", label: "Debt", icon: AlertTriangle, enabled: true },
   { to: "/daily-focus", label: "Daily Focus", icon: CalendarDays, enabled: true },
   { to: "/documents", label: "Documents", icon: FileText, enabled: true },
   { to: "/activity", label: "Activity", icon: Activity, enabled: true },
   { to: "/settings", label: "Settings", icon: Settings, enabled: true },
 ];
 
+/** Hook that returns the current debt item count. Used for the sidebar badge.
+ *  All three queries are cached by TanStack Query so this is cheap. */
+function useDebtCount(): number {
+  const contacts = useContacts();
+  const touchpoints = useAllTouchpoints();
+  const reminders = useAllReminders();
+  return useMemo(() => {
+    if (!contacts.data || !touchpoints.data || !reminders.data) return 0;
+    return computeDebt(
+      contacts.data,
+      touchpoints.data,
+      reminders.data,
+      new Date()
+    ).length;
+  }, [contacts.data, touchpoints.data, reminders.data]);
+}
+
 export function Sidebar() {
   const sync = useSyncStatus();
+  const debtCount = useDebtCount();
   const lastSyncedAt = sync.lastSyncedAt
     ? new Date(sync.lastSyncedAt).toISOString()
     : null;
@@ -76,6 +103,7 @@ export function Sidebar() {
               </div>
             );
           }
+          const badge = item.to === "/debt" && debtCount > 0 ? debtCount : null;
           return (
             <NavLink
               key={item.to}
@@ -91,7 +119,12 @@ export function Sidebar() {
               end={item.to === "/"}
             >
               <Icon className="h-4 w-4" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {badge !== null && (
+                <span className="font-condensed text-[10px] font-bold tracking-wider text-gold tabular-nums bg-gold/[0.15] border border-gold-dim rounded-sm px-1.5 py-0.5 leading-none">
+                  {badge}
+                </span>
+              )}
             </NavLink>
           );
         })}

@@ -18,11 +18,16 @@ import { DailyScoreCard } from "@/components/daily-score-card";
 import { QuickLogDialog } from "@/components/quick-log-dialog";
 import {
   useAllReminders,
+  useAllTouchpoints,
   useContacts,
   useSettings,
 } from "@/lib/queries";
 import { completeReminder } from "@/lib/kit";
-import { computeNeedsAttention } from "@/lib/attention";
+import {
+  computeDebt,
+  DEBT_CATEGORY_LABEL,
+  DEBT_CATEGORY_TONE,
+} from "@/lib/debt";
 import { getDb } from "@/lib/db";
 import type { TouchpointRow } from "@/lib/schema";
 import {
@@ -61,6 +66,7 @@ function greetingFor(hour: number): string {
 export function HomeRoute() {
   const reminders = useAllReminders();
   const contacts = useContacts();
+  const touchpoints = useAllTouchpoints();
   const settings = useSettings();
   const today = todayIso(settings.data?.timezone);
   const todaysTouchpoints = useQuery({
@@ -88,10 +94,16 @@ export function HomeRoute() {
       });
   }, [reminders.data, today]);
 
-  const needsAttention = useMemo(() => {
-    if (!contacts.data) return [];
-    return computeNeedsAttention(contacts.data, new Date());
-  }, [contacts.data]);
+  const debt = useMemo(() => {
+    if (!contacts.data || !touchpoints.data || !reminders.data) return [];
+    return computeDebt(
+      contacts.data,
+      touchpoints.data,
+      reminders.data,
+      new Date()
+    );
+  }, [contacts.data, touchpoints.data, reminders.data]);
+  const debtPreview = debt.slice(0, 5);
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => completeReminder(id),
@@ -115,8 +127,7 @@ export function HomeRoute() {
             </h1>
             <p className="mt-2 text-sm text-fg-muted">
               {dueNow.length} reminder{dueNow.length === 1 ? "" : "s"} due ·{" "}
-              {needsAttention.length} contact
-              {needsAttention.length === 1 ? "" : "s"} need attention
+              {debt.length} debt item{debt.length === 1 ? "" : "s"}
             </p>
           </div>
           <div className="flex items-end gap-3 flex-wrap">
@@ -197,46 +208,53 @@ export function HomeRoute() {
         </section>
 
         <section>
-          <h2 className="awm-label mb-3 inline-flex items-center gap-1.5">
-            <AlertTriangle className="h-3 w-3" />
-            Needs attention
-          </h2>
-          {contacts.isPending ? (
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="awm-label inline-flex items-center gap-1.5">
+              <AlertTriangle className="h-3 w-3" />
+              Relationship debt
+            </h2>
+            {debt.length > debtPreview.length && (
+              <Link
+                to="/debt"
+                className="text-[10px] uppercase tracking-wider font-condensed text-gold hover:text-gold-bright transition-colors"
+              >
+                View all {debt.length} →
+              </Link>
+            )}
+          </div>
+          {contacts.isPending || touchpoints.isPending || reminders.isPending ? (
             <p className="text-sm text-fg-muted">Loading…</p>
-          ) : needsAttention.length === 0 ? (
+          ) : debt.length === 0 ? (
             <p className="rounded-sm border border-border bg-bg-surface p-4 text-sm text-fg-muted italic">
-              All warm & client relationships are within their freshness
-              windows.
+              Inbox zero. No cooling contacts, no unfollowed actions.
             </p>
           ) : (
             <ul className="space-y-2">
-              {needsAttention.map(({ contact, reason, daysSinceTouch }) => (
+              {debtPreview.map((f) => (
                 <li
-                  key={contact.id}
+                  key={f.touchpoint?.id ?? f.contact.id}
                   className="rounded-sm border border-border bg-bg-surface p-3 flex items-center gap-3"
                 >
                   <div className="flex-1 min-w-0">
                     <Link
-                      to={`/contacts/${contact.id}`}
+                      to={`/contacts/${f.contact.id}`}
                       className="font-body text-sm font-semibold text-fg hover:text-gold transition-colors"
                     >
-                      {contact.name}
+                      {f.contact.name}
                     </Link>
                     <p className="text-xs text-fg-muted mt-0.5">
-                      {reason === "cooling" ? "Cooling" : "At risk"} ·{" "}
-                      {daysSinceTouch === null
+                      {DEBT_CATEGORY_LABEL[f.category]} ·{" "}
+                      {f.daysSince === null
                         ? "no touchpoint logged"
-                        : `${daysSinceTouch} day${daysSinceTouch === 1 ? "" : "s"} since last touch`}
+                        : `${f.daysSince} day${f.daysSince === 1 ? "" : "s"} ago`}
                     </p>
                   </div>
-                  <Badge
-                    tone={reason === "at_risk" ? "danger" : "warning"}
-                  >
-                    {reason === "at_risk" ? "At risk" : "Cooling"}
+                  <Badge tone={DEBT_CATEGORY_TONE[f.category]}>
+                    {DEBT_CATEGORY_LABEL[f.category]}
                   </Badge>
                   <Link
-                    to={`/contacts/${contact.id}`}
-                    aria-label={`Open ${contact.name}`}
+                    to={`/contacts/${f.contact.id}`}
+                    aria-label={`Open ${f.contact.name}`}
                   >
                     <ChevronRight className="h-4 w-4 text-fg-subtle" />
                   </Link>

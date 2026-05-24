@@ -11,6 +11,7 @@ import { DocumentsRoute } from "@/routes/documents";
 import { SettingsRoute } from "@/routes/settings";
 import { TouchpointDetailRoute } from "@/routes/touchpoint-detail";
 import { ActivityRoute } from "@/routes/activity";
+import { DebtRoute } from "@/routes/debt";
 import { useEventPoller } from "@/lib/polling";
 import { useSyncStatus } from "@/lib/sync-status";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -52,6 +53,7 @@ export default function App() {
                 element={<TouchpointDetailRoute />}
               />
               <Route path="/activity" element={<ActivityRoute />} />
+              <Route path="/debt" element={<DebtRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
             </Routes>
           </ErrorBoundary>

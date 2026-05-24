@@ -110,6 +110,14 @@ export async function fetchTouchpointsByContact(
   );
 }
 
+/** All touchpoints across all contacts. Used by the debt computation. */
+export async function fetchAllTouchpoints(): Promise<TouchpointRow[]> {
+  const db = await getDb();
+  return db.select<TouchpointRow[]>(
+    `SELECT ${ALL_TOUCHPOINT_COLS} FROM touchpoints ORDER BY date DESC, created_at DESC`
+  );
+}
+
 export async function fetchTouchpoint(id: string): Promise<TouchpointRow | null> {
   const db = await getDb();
   const rows = await db.select<TouchpointRow[]>(
@@ -298,6 +306,10 @@ export function useRemindersByContact(contactId: string | undefined) {
 
 export function useAllReminders() {
   return useQuery({ queryKey: queryKeys.reminders, queryFn: fetchAllReminders });
+}
+
+export function useAllTouchpoints() {
+  return useQuery({ queryKey: queryKeys.touchpoints, queryFn: fetchAllTouchpoints });
 }
 
 export function usePendingReminderCountByContact() {
