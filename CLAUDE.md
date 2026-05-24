@@ -139,6 +139,7 @@ Kit-level:
 - `HANDOFF_REVIEW_BRIEF.md` — Per-release handoff brief for reviewers
 - `APP_BUG_FIX_BRIEF_FOR_CLAUDECODE.md` — Bug-fix and polish pass history
 - `FEATURE_BUNDLE_BRIEF_20260521.md` — Active feature bundle scope
+- `MORNING_BRIEF_SETUP.md` — Install / manage the 9am Telegram morning brief launchd job
 - `design.md`, `branding_assets_spec.md` — Deliverable design schemas and asset spec
 
 App-level (`app/`):

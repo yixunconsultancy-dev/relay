@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  AWMOS morning brief launchd template.
+
+  Substitute __KIT_ROOT__ with the absolute path to the kit folder before
+  copying this file to ~/Library/LaunchAgents/. The install helper
+  scripts/install-morning-brief-cron.sh does that for you.
+
+  StartCalendarInterval fires at the local time on the machine; if the
+  consultant is on macOS in Asia/Singapore, 9:00 here = 9am SGT. If they
+  travel across timezones, the brief follows their machine's local time —
+  desirable for a "morning briefing" anyway.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.awm.relationshipos.morning-brief</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__KIT_ROOT__/scripts/send_morning_brief.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__KIT_ROOT__</string>
+
+  <!-- 9:00 local time daily. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- Don't restart on crash; just wait until tomorrow morning. -->
+  <key>KeepAlive</key>
+  <false/>
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/awmos-morning-brief.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/awmos-morning-brief.err.log</string>
+
+  <!-- Minimal PATH; the send script does its own pyenv/asdf/brew detection. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
