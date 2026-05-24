@@ -566,8 +566,15 @@ If the consultant uploads an `.xlsx` / `.csv` to add many contacts:
   clients.xlsx, row N"`.
 - After the import, set per-contact fields via `update-contact` (phone,
   email, etc.) — those don't write touchpoints.
+- **For rows where you're not confident** about the extraction (ambiguous
+  contact, unclear sentiment, garbled text, unknown enum value), use
+  `queue-clarification` instead of guessing. See "Low-confidence handling"
+  below. This avoids polluting the kit with bad guesses AND avoids
+  interrupting the consultant with one-by-one inline questions during a
+  bulk import.
 - Tell the consultant: "Imported N rows; none of these will show as
-  recent interactions because they're tagged as imports."
+  recent interactions because they're tagged as imports. M rows were
+  unclear and have been queued for your review at /clarifications."
 
 ## Policy Management
 
@@ -801,18 +808,158 @@ python3 scripts/relationship_os.py --env "$HERMES_HOME/.env" events \
 The Events table is intentionally not synced to the consultant view — it's
 a diagnostic surface for you and the consultant when they ask.
 
-## Ambiguity
+## Low-confidence handling
 
-If the consultant's note does not contain a clear contact name, ask for a short
-clarification instead of guessing. A good recovery prompt is:
+Two paths when your extraction confidence is low. Pick based on context.
+
+### Path A: inline confidence prompt (default — single Telegram message)
+
+For one-off consultant messages (the normal mode), if any required field
+has low confidence, ask before writing. **Never speculate and log anyway.**
+
+Triggers — ask inline when ANY of:
+
+- Contact name doesn't match exactly one existing contact and the
+  message doesn't unambiguously create a new person
+- Relative date is genuinely ambiguous (e.g. "next Friday" sent on a
+  Friday — does that mean today or next week?)
+- Required enum value (`touchpoint_type`, `sentiment`, `contact_type`,
+  `relationship_stage`) doesn't have a clear best match
+- Action item or follow-up timing is implied but not stated
+
+A good inline recovery prompt:
 
 ```text
 I could not identify the contact name. Try:
 Log: Demo Client - had coffee today, follow up next Friday.
 ```
 
+For disambiguation:
+
+```text
+"Sarah" matches two contacts: Sarah Lim and Sarah Tan. Which one?
+```
+
 If a command returns more than one plausible match, ask the consultant to pick
 one before writing new data.
+
+### Path B: queue the clarification (bulk-import context)
+
+When you're processing a batch (Excel import, forwarded thread of 5+
+messages, multiple screenshots in one go), asking one-by-one inline is
+hostile. Instead, **call `queue-clarification`** for each unclear item
+and continue with the rest of the batch.
+
+```bash
+python3 scripts/relationship_os.py --format=json queue-clarification --json '{
+  "source_input": "Met Sarah today, she wants more info",
+  "source_context": "bulk_import",
+  "hermes_guess": {"contact_name": "Sarah", "summary": "Met today, wants info"},
+  "reason": "Two contacts named Sarah — Sarah Lim or Sarah Tan?"
+}'
+```
+
+- `source_input` — verbatim consultant input (so they remember what it was)
+- `source_context` — "bulk_import" / "forwarded_thread" / "manual"
+- `hermes_guess` — your best-guess extraction as a JSON object (matches
+  the `log-touchpoint` payload shape — consultant can accept it as-is)
+- `reason` — one-line human-readable explanation of why you parked it
+
+After the batch finishes, tell the consultant:
+
+```text
+Imported 18 rows. 2 were unclear and queued for your review. Open
+/clarifications in AWMOS to triage them.
+```
+
+The consultant resolves each via the app's /clarifications route:
+**Log as guess** (accepts `hermes_guess` as-is), **Edit & log** (corrects
+the payload), or **Discard**.
+
+### When to ask inline vs queue (rule of thumb)
+
+- If you're handling ONE message in normal back-and-forth → ask inline.
+- If you're processing the Nth of M items in a batch where N > 3 → queue.
+- If the consultant is offline / not responding mid-batch → queue.
+- If you've already asked the consultant one clarification in this
+  bulk pass and still have unclear items → queue the rest (don't keep
+  pinging).
+
+## Morning Brief (auto-Telegram at 9am SGT)
+
+On Hermes initialization, set up a daily morning brief sent to the
+consultant via Telegram at 9am Singapore time. This is a calm,
+once-a-day summary so the consultant opens their day with context
+instead of an empty Today screen.
+
+### What the brief contains
+
+The Python kit's `today-brief` command produces it:
+
+```bash
+python3 scripts/relationship_os.py --format=text today-brief
+```
+
+Includes (in order):
+
+1. Greeting + date
+2. Reminders due today (priority-sorted, top 10)
+3. Birthdays today (with age if known)
+4. Ripe to reach out (top 5 — contacts showing engagement signals)
+5. Relationship debt (top 5 by category urgency)
+
+The output is plain text suitable for sending as a Telegram message
+directly. JSON output also available with `--format=json` for richer
+formatting if needed.
+
+### Setup on init (one-time)
+
+On first Hermes initialization for a profile, check if the morning
+brief launchd job exists:
+
+```bash
+launchctl list | grep com.awm.relationshipos.morning-brief
+```
+
+If missing, install it from the template at
+`scripts/launchd/com.awm.relationshipos.morning-brief.plist`:
+
+```bash
+bash scripts/install-morning-brief-cron.sh
+```
+
+The script:
+- Copies the plist template to `~/Library/LaunchAgents/`
+- Substitutes the kit root path + the consultant's Telegram chat ID
+- Loads the agent with `launchctl bootstrap`
+- Tests delivery with a one-shot run
+
+See `MORNING_BRIEF_SETUP.md` for the manual install procedure if you
+need to debug.
+
+### Delivery mechanism
+
+The launchd job runs `scripts/send_morning_brief.sh` daily at 9am SGT
+(which is `StartCalendarInterval { Hour: 9, Minute: 0 }` in
+`Asia/Singapore` timezone — launchd respects the system timezone).
+
+`send_morning_brief.sh`:
+1. Calls `today-brief --format=text` to get the formatted brief
+2. POSTs to the Telegram Bot API `sendMessage` endpoint
+3. Logs to `~/Library/Logs/awmos-morning-brief.log` for debugging
+
+### When NOT to send
+
+The brief is unconditional — it sends every morning even if there's
+nothing actionable (the "Inbox zero" empty state is itself useful
+information). If the consultant wants to mute it (vacation, etc.):
+
+```bash
+launchctl bootout gui/$(id -u)/com.awm.relationshipos.morning-brief
+```
+
+…and re-load when ready. Don't add complex conditional-send logic to
+the script.
 
 ## Privacy Language
 
