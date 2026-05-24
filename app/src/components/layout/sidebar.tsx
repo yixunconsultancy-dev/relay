@@ -4,6 +4,7 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  Network,
   Sun,
   Users,
   Bell,
@@ -36,6 +37,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Today", icon: Sun, enabled: true },
   { to: "/contacts", label: "Contacts", icon: Users, enabled: true },
+  { to: "/graph", label: "Graph", icon: Network, enabled: true },
   { to: "/reminders", label: "Reminders", icon: Bell, enabled: true },
   { to: "/debt", label: "Debt", icon: AlertTriangle, enabled: true },
   { to: "/clarifications", label: "Clarify", icon: AlertCircle, enabled: true },

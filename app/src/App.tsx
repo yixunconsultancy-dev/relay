@@ -13,6 +13,7 @@ import { TouchpointDetailRoute } from "@/routes/touchpoint-detail";
 import { ActivityRoute } from "@/routes/activity";
 import { DebtRoute } from "@/routes/debt";
 import { ClarificationsRoute } from "@/routes/clarifications";
+import { GraphRoute } from "@/routes/graph";
 import { useEventPoller } from "@/lib/polling";
 import { useSyncStatus } from "@/lib/sync-status";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="/activity" element={<ActivityRoute />} />
               <Route path="/debt" element={<DebtRoute />} />
               <Route path="/clarifications" element={<ClarificationsRoute />} />
+              <Route path="/graph" element={<GraphRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
             </Routes>
           </ErrorBoundary>
