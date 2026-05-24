@@ -29,6 +29,7 @@ export function dispatchInvalidations(
   let reminderTouched = false;
   let touchpointTouched = false;
   let contactListTouched = false;
+  let clarificationsTouched = false;
 
   for (const e of events) {
     if (e.contact_id) touchedContacts.add(e.contact_id);
@@ -74,6 +75,18 @@ export function dispatchInvalidations(
       case "policy_archived":
         // Policies are per-contact; the affected contact's detail covers it.
         break;
+      case "clarification_queued":
+      case "clarification_resolved":
+        // Refresh the pending-clarifications query so the sidebar badge +
+        // /clarifications route reflect new/triaged items.
+        clarificationsTouched = true;
+        // log_corrected resolution writes a touchpoint too, so refresh
+        // touchpoint-shaped queries when resolving.
+        if (e.kind === "clarification_resolved") {
+          touchpointTouched = true;
+          contactListTouched = true;
+        }
+        break;
     }
   }
 
@@ -97,6 +110,9 @@ export function dispatchInvalidations(
     queryClient.invalidateQueries({
       queryKey: ["reminders", "pending-counts"],
     });
+  }
+  if (clarificationsTouched) {
+    queryClient.invalidateQueries({ queryKey: ["clarifications", "pending"] });
   }
   // Always bump the day's daily-focus so follow-ups-due refreshes.
   queryClient.invalidateQueries({ queryKey: ["daily-focus"] });

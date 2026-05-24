@@ -118,6 +118,31 @@ export async function fetchAllTouchpoints(): Promise<TouchpointRow[]> {
   );
 }
 
+const ALL_CLARIFICATION_COLS =
+  '"id","source_input","source_context","hermes_guess","reason","status","resolution","resolution_payload","created_at","resolved_at"';
+
+export async function fetchPendingClarifications(): Promise<import("@/lib/schema").ClarificationRow[]> {
+  const db = await getDb();
+  return db.select<import("@/lib/schema").ClarificationRow[]>(
+    `SELECT ${ALL_CLARIFICATION_COLS} FROM clarifications WHERE status = 'pending' ORDER BY created_at DESC`
+  );
+}
+
+export async function fetchClarificationsBy(
+  status: "pending" | "resolved" | "abandoned" | "any" = "pending"
+): Promise<import("@/lib/schema").ClarificationRow[]> {
+  const db = await getDb();
+  if (status === "any") {
+    return db.select<import("@/lib/schema").ClarificationRow[]>(
+      `SELECT ${ALL_CLARIFICATION_COLS} FROM clarifications ORDER BY created_at DESC`
+    );
+  }
+  return db.select<import("@/lib/schema").ClarificationRow[]>(
+    `SELECT ${ALL_CLARIFICATION_COLS} FROM clarifications WHERE status = $1 ORDER BY created_at DESC`,
+    [status]
+  );
+}
+
 export async function fetchTouchpoint(id: string): Promise<TouchpointRow | null> {
   const db = await getDb();
   const rows = await db.select<TouchpointRow[]>(
@@ -310,6 +335,13 @@ export function useAllReminders() {
 
 export function useAllTouchpoints() {
   return useQuery({ queryKey: queryKeys.touchpoints, queryFn: fetchAllTouchpoints });
+}
+
+export function usePendingClarifications() {
+  return useQuery({
+    queryKey: ["clarifications", "pending"] as const,
+    queryFn: fetchPendingClarifications,
+  });
 }
 
 export function usePendingReminderCountByContact() {

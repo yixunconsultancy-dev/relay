@@ -1142,6 +1142,117 @@ Assets: logo_dark.png, bg_mountain_clouds.png, bg_network_mesh.png.
             payload = json.loads(latest["payload"])
             self.assertIn("occupation", payload["diff"])
 
+    def test_queue_and_list_clarifications(self):
+        """queue-clarification appends to the queue; list-clarifications returns pending by default."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            payload = {
+                "source_input": "Met Sarah today",
+                "source_context": "bulk_import",
+                "hermes_guess": {"contact_name": "Sarah", "summary": "Met today"},
+                "reason": "Two contacts named Sarah — Lim or Tan?",
+            }
+            queued = self.run_json_cli(
+                ["queue-clarification", "--json", json.dumps(payload)], env
+            )
+            self.assertTrue(queued["ok"])
+            self.assertEqual(queued["status"], "pending")
+            self.assertTrue(queued["id"].startswith("q_"))
+
+            listed = self.run_json_cli(["list-clarifications"], env)
+            self.assertEqual(listed["count"], 1)
+            row = listed["clarifications"][0]
+            self.assertEqual(row["status"], "pending")
+            self.assertEqual(row["source_context"], "bulk_import")
+            # hermes_guess should round-trip back into an object, not a string.
+            self.assertEqual(row["hermes_guess"]["contact_name"], "Sarah")
+
+    def test_resolve_clarification_log_corrected(self):
+        """log_corrected accepts a JSON payload, calls log_touchpoint, marks resolved."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            queued = self.run_json_cli(
+                ["queue-clarification", "--json", json.dumps({
+                    "source_input": "Met Sarah today",
+                    "source_context": "bulk_import",
+                    "reason": "Ambiguous contact",
+                })],
+                env,
+            )
+            cid = queued["id"]
+            corrected = self.sample_touchpoint_payload(contact_name="Sarah Lim")
+            corrected["summary"] = "Met Sarah Lim today, wants protection info."
+            resolved = self.run_json_cli(
+                [
+                    "resolve-clarification",
+                    "--id", cid,
+                    "--resolution", "log_corrected",
+                    "--json", json.dumps(corrected),
+                ],
+                env,
+            )
+            self.assertTrue(resolved["ok"])
+            self.assertEqual(resolved["resolution"], "log_corrected")
+            self.assertIsNotNone(resolved["logged_touchpoint_id"])
+            # Now resolved + no longer in pending list
+            pending = self.run_json_cli(["list-clarifications"], env)
+            self.assertEqual(pending["count"], 0)
+            resolved_list = self.run_json_cli(
+                ["list-clarifications", "--status", "resolved"], env
+            )
+            self.assertEqual(resolved_list["count"], 1)
+
+    def test_resolve_clarification_discard(self):
+        """discard marks as abandoned, no touchpoint logged."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            queued = self.run_json_cli(
+                ["queue-clarification", "--json", json.dumps({
+                    "source_input": "garbage",
+                    "source_context": "bulk_import",
+                    "reason": "no useful signal",
+                })],
+                env,
+            )
+            cid = queued["id"]
+            resolved = self.run_json_cli(
+                [
+                    "resolve-clarification",
+                    "--id", cid,
+                    "--resolution", "discard",
+                ],
+                env,
+            )
+            self.assertEqual(resolved["resolution"], "discard")
+            self.assertIsNone(resolved["logged_touchpoint_id"])
+            abandoned = self.run_json_cli(
+                ["list-clarifications", "--status", "abandoned"], env
+            )
+            self.assertEqual(abandoned["count"], 1)
+
+    def test_resolve_clarification_rejects_invalid_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            queued = self.run_json_cli(
+                ["queue-clarification", "--json", json.dumps({
+                    "source_input": "x", "source_context": "bulk_import", "reason": "y",
+                })],
+                env,
+            )
+            # Resolution "log_yolo" is not in VALID_CLARIFICATION_RESOLUTIONS
+            proc = subprocess.run(
+                [sys.executable, str(SCRIPT), "--env", str(ROOT / ".env.example"),
+                 "--format=json", "resolve-clarification",
+                 "--id", queued["id"], "--resolution", "log_yolo"],
+                cwd=ROOT, text=True, capture_output=True, env=env,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("resolution must be one of", proc.stdout)
+
     def test_today_brief_returns_structured_composite(self):
         """today-brief returns reminders_due + birthdays_today + ripe_signals
         + debt_top + stats, plus a Telegram-ready brief_text."""

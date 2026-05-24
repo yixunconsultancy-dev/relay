@@ -83,6 +83,24 @@ export interface SettingRow {
   value: string;
 }
 
+/**
+ * Clarification queue row. Used during bulk imports when Hermes can't
+ * extract confidently — the row is parked here for triage in the AWMOS
+ * /clarifications route rather than asked one-by-one inline in chat.
+ */
+export interface ClarificationRow {
+  id: string;
+  source_input: string;
+  source_context: string;       // "bulk_import" / "telegram" / "manual"
+  hermes_guess: string;         // JSON-encoded best-guess extraction (may be "")
+  reason: string;
+  status: "pending" | "resolved" | "abandoned" | "";
+  resolution: "log_anyway" | "log_corrected" | "discard" | "";
+  resolution_payload: string;   // JSON-encoded corrected payload
+  created_at: string;
+  resolved_at: string;
+}
+
 export interface PolicyRow {
   id: string;
   contact_id: string;

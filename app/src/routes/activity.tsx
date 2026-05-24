@@ -29,6 +29,8 @@ const KIND_LABEL: Record<EventKind, string> = {
   policy_created: "Policy added",
   policy_updated: "Policy updated",
   policy_archived: "Policy archived",
+  clarification_queued: "Clarification queued",
+  clarification_resolved: "Clarification resolved",
 };
 
 function kindLabel(kind: string): string {
@@ -51,6 +53,8 @@ function formatSource(source: string): string {
     "app:daily-focus": "App / daily focus",
     "app:settings": "App / settings",
     "hermes:update-contact-fields": "Hermes / update-contact",
+    "hermes:queue-clarification": "Hermes / queue clarification",
+    "app:resolve-clarification": "App / clarify",
   };
   return labels[source] ?? source;
 }

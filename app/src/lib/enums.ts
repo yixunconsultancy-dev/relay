@@ -89,6 +89,8 @@ export const EVENT_KINDS = [
   "policy_created",
   "policy_updated",
   "policy_archived",
+  "clarification_queued",
+  "clarification_resolved",
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 

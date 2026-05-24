@@ -52,6 +52,7 @@ DAILY_FOCUS = "Daily Focus"
 SETTINGS = "Settings"
 EVENTS = "Events"
 POLICIES = "Policies"
+CLARIFICATIONS = "Clarifications"
 
 # Append-only audit table. Every durable write (touchpoint logged, reminder
 # completed/snoozed/cancelled, etc.) records one row here so the consultant or
@@ -72,6 +73,8 @@ VALID_EVENT_KINDS = {
     "policy_created",
     "policy_updated",
     "policy_archived",
+    "clarification_queued",
+    "clarification_resolved",
 }
 
 # Tables mirrored to the consultant-facing view. The Events table is
@@ -185,6 +188,31 @@ HEADERS: Dict[str, List[str]] = {
         "notes",
         "created_at",
         "updated_at",
+    ],
+    # Clarification queue — items Hermes wasn't confident enough to log.
+    # Used during bulk imports (consultant forwards 20 Excel rows; Hermes
+    # parses each; the unclear ones land here for triage instead of one-by-one
+    # inline questions).
+    CLARIFICATIONS: [
+        "id",
+        # Verbatim consultant input that triggered the clarification.
+        "source_input",
+        # Where the input came from. "bulk_import" / "telegram" / "manual".
+        "source_context",
+        # Hermes's best-guess extraction as JSON. The consultant can accept
+        # it as-is via resolve-clarification --resolution log_anyway.
+        "hermes_guess",
+        # Human-readable reason (e.g., "Two contacts named Sarah —
+        # disambiguation required.")
+        "reason",
+        # pending / resolved / abandoned
+        "status",
+        # log_anyway / log_corrected / discard / "" (when pending)
+        "resolution",
+        # Corrected payload (JSON) if log_corrected. Empty otherwise.
+        "resolution_payload",
+        "created_at",
+        "resolved_at",
     ],
 }
 
@@ -2474,6 +2502,225 @@ def _brief_debt_top(store: Store, today: date, limit: int = 5) -> List[Dict[str,
 
     flags.sort(key=lambda f: (PRIORITY[str(f["category"])], -(f["days_since"] or 9999)))  # type: ignore[arg-type]
     return flags[:limit]
+
+
+VALID_CLARIFICATION_RESOLUTIONS = {"log_anyway", "log_corrected", "discard"}
+VALID_CLARIFICATION_STATUSES = {"pending", "resolved", "abandoned"}
+
+
+def cmd_queue_clarification(args: argparse.Namespace) -> Dict[str, object]:
+    """Park an item Hermes wasn't confident enough to log.
+
+    Used during bulk imports (consultant forwards 20 Excel rows; Hermes
+    parses each; the unclear ones land here for the consultant to triage
+    later via the AWMOS /clarifications route instead of one-by-one
+    inline questions in chat).
+    """
+    store = get_store()
+    store.ensure()
+
+    payload: Optional[Dict[str, object]] = None
+    if args.json_file:
+        payload = json.loads(Path(args.json_file).expanduser().read_text(encoding="utf-8"))
+    elif args.json is not None:
+        json_text = sys.stdin.read() if args.json == "-" else args.json
+        payload = json.loads(json_text)
+    if not isinstance(payload, dict):
+        raise RelationshipOSError(
+            "queue-clarification requires a JSON payload (--json or --json-file)."
+        )
+
+    source_input = str(payload.get("source_input") or "").strip()
+    if not source_input:
+        raise RelationshipOSError("queue-clarification payload requires `source_input`.")
+    source_context = (str(payload.get("source_context") or "bulk_import")).strip() or "bulk_import"
+    reason = str(payload.get("reason") or "").strip()
+    if not reason:
+        raise RelationshipOSError(
+            "queue-clarification payload requires `reason` (why Hermes parked this)."
+        )
+    hermes_guess = payload.get("hermes_guess")
+    if hermes_guess is not None and not isinstance(hermes_guess, (dict, list)):
+        raise RelationshipOSError("`hermes_guess` must be a JSON object/array if provided.")
+
+    today = today_in_settings(store)
+    cid = make_id("q", today)
+    row = {
+        "id": cid,
+        "source_input": source_input,
+        "source_context": source_context,
+        "hermes_guess": json.dumps(hermes_guess) if hermes_guess is not None else "",
+        "reason": reason,
+        "status": "pending",
+        "resolution": "",
+        "resolution_payload": "",
+        "created_at": now_iso(),
+        "resolved_at": "",
+    }
+    store.append(CLARIFICATIONS, row)
+    log_event(
+        store,
+        "clarification_queued",
+        contact_id="",
+        subject_id=cid,
+        payload={
+            "source_context": source_context,
+            "reason": reason,
+            "source_input_excerpt": source_input[:120],
+        },
+        source=str(payload.get("source") or "hermes:queue-clarification"),
+    )
+    return {
+        "ok": True,
+        "command": "queue-clarification",
+        "id": cid,
+        "status": "pending",
+        "message": f"Queued clarification {cid} ({source_context}).",
+    }
+
+
+def cmd_list_clarifications(args: argparse.Namespace) -> Dict[str, object]:
+    """List clarifications, optionally filtered by status. Default: pending."""
+    store = get_store()
+    store.ensure()
+    target_status = (args.status or "pending").strip()
+    if target_status not in (VALID_CLARIFICATION_STATUSES | {"any"}):
+        raise RelationshipOSError(
+            f"--status must be one of {sorted(VALID_CLARIFICATION_STATUSES)} or 'any'; got {target_status!r}."
+        )
+    rows = store.read(CLARIFICATIONS)
+    if target_status != "any":
+        rows = [r for r in rows if r.get("status") == target_status]
+    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    limit = max(1, int(args.limit or 100))
+    rows = rows[:limit]
+    out = []
+    for r in rows:
+        guess: object = r.get("hermes_guess") or ""
+        if isinstance(guess, str) and guess:
+            try:
+                guess = json.loads(guess)
+            except (ValueError, json.JSONDecodeError):
+                pass
+        out.append({
+            "id": r.get("id"),
+            "source_input": r.get("source_input"),
+            "source_context": r.get("source_context"),
+            "hermes_guess": guess,
+            "reason": r.get("reason"),
+            "status": r.get("status"),
+            "resolution": r.get("resolution"),
+            "created_at": r.get("created_at"),
+            "resolved_at": r.get("resolved_at"),
+        })
+    return {
+        "ok": True,
+        "command": "list-clarifications",
+        "status_filter": target_status,
+        "count": len(out),
+        "clarifications": out,
+    }
+
+
+def cmd_resolve_clarification(args: argparse.Namespace) -> Dict[str, object]:
+    """Resolve a queued clarification by logging (with or without corrections) or discarding.
+
+    Resolutions:
+      log_anyway    — take hermes_guess as-is, call log_touchpoint with it
+      log_corrected — take --json payload (or --json-file), call log_touchpoint
+      discard       — mark as abandoned, no touchpoint logged
+    """
+    store = get_store()
+    store.ensure()
+
+    if not args.clarification_id:
+        raise RelationshipOSError("resolve-clarification requires --id <clarification_id>.")
+    resolution = (args.resolution or "").strip()
+    if resolution not in VALID_CLARIFICATION_RESOLUTIONS:
+        raise RelationshipOSError(
+            f"--resolution must be one of {sorted(VALID_CLARIFICATION_RESOLUTIONS)}; got {resolution!r}."
+        )
+
+    rows = store.read(CLARIFICATIONS)
+    target = next((r for r in rows if r.get("id") == args.clarification_id), None)
+    if not target:
+        raise RelationshipOSError(f"No clarification with id {args.clarification_id!r}.")
+    if target.get("status") != "pending":
+        raise RelationshipOSError(
+            f"Clarification {args.clarification_id!r} is already {target.get('status')!r}; nothing to resolve."
+        )
+
+    logged_touchpoint_id: Optional[str] = None
+    payload_for_log: Optional[Dict[str, object]] = None
+
+    if resolution == "log_anyway":
+        guess_raw = target.get("hermes_guess") or ""
+        if not guess_raw:
+            raise RelationshipOSError(
+                "Cannot log_anyway: this clarification has no hermes_guess. Use log_corrected with a JSON payload instead."
+            )
+        try:
+            payload_for_log = json.loads(guess_raw)
+        except json.JSONDecodeError as exc:
+            raise RelationshipOSError(f"hermes_guess is not valid JSON: {exc}") from exc
+
+    elif resolution == "log_corrected":
+        if args.json_file:
+            payload_for_log = json.loads(Path(args.json_file).expanduser().read_text(encoding="utf-8"))
+        elif args.json is not None:
+            json_text = sys.stdin.read() if args.json == "-" else args.json
+            payload_for_log = json.loads(json_text)
+        else:
+            raise RelationshipOSError(
+                "log_corrected requires --json or --json-file with the corrected touchpoint payload."
+            )
+
+    if payload_for_log is not None:
+        if not isinstance(payload_for_log, dict):
+            raise RelationshipOSError("touchpoint payload must be a JSON object.")
+        touchpoint_input = touchpoint_input_from_dict(
+            payload_for_log, today_in_settings(store)
+        )
+        result = log_touchpoint(store, touchpoint_input)
+        tp = result.get("touchpoint") or {}
+        logged_touchpoint_id = tp.get("id") if isinstance(tp, dict) else None
+
+    # Update the clarification row in place via Store.replace (no UPDATE in the
+    # generic Store interface).
+    resolution_payload_str = (
+        json.dumps(payload_for_log) if payload_for_log is not None else ""
+    )
+    new_rows = []
+    for r in rows:
+        if r.get("id") == args.clarification_id:
+            r = dict(r)
+            r["status"] = "resolved" if resolution != "discard" else "abandoned"
+            r["resolution"] = resolution
+            r["resolution_payload"] = resolution_payload_str
+            r["resolved_at"] = now_iso()
+        new_rows.append(r)
+    store.replace(CLARIFICATIONS, new_rows)
+
+    log_event(
+        store,
+        "clarification_resolved",
+        contact_id="",
+        subject_id=args.clarification_id,
+        payload={
+            "resolution": resolution,
+            "logged_touchpoint_id": logged_touchpoint_id or "",
+        },
+        source=str(getattr(args, "event_source", None) or "app:resolve-clarification"),
+    )
+
+    return {
+        "ok": True,
+        "command": "resolve-clarification",
+        "id": args.clarification_id,
+        "resolution": resolution,
+        "logged_touchpoint_id": logged_touchpoint_id,
+        "message": f"Clarification {args.clarification_id} resolved as {resolution}.",
+    }
 
 
 def cmd_today_brief(args: argparse.Namespace) -> Dict[str, object]:
@@ -4790,6 +5037,46 @@ def build_parser() -> argparse.ArgumentParser:
              "Used by the 9am Telegram cron job. Use --format=text for Telegram-ready output.",
     )
     today_brief_p.set_defaults(func=cmd_today_brief)
+
+    queue_clar_p = sub.add_parser(
+        "queue-clarification",
+        help="Park an item Hermes wasn't confident enough to log (bulk-import escape hatch).",
+    )
+    queue_clar_p.add_argument("--json", help="Inline JSON payload. Use '-' for stdin.")
+    queue_clar_p.add_argument("--json-file", help="Path to JSON payload.")
+    queue_clar_p.set_defaults(func=cmd_queue_clarification)
+
+    list_clar_p = sub.add_parser(
+        "list-clarifications",
+        help="List clarifications (default: pending only).",
+    )
+    list_clar_p.add_argument(
+        "--status",
+        default="pending",
+        help="pending (default), resolved, abandoned, or any.",
+    )
+    list_clar_p.add_argument("--limit", type=int, default=100)
+    list_clar_p.set_defaults(func=cmd_list_clarifications)
+
+    resolve_clar_p = sub.add_parser(
+        "resolve-clarification",
+        help="Resolve a queued clarification: log_anyway / log_corrected / discard.",
+    )
+    resolve_clar_p.add_argument("--id", dest="clarification_id", required=True)
+    resolve_clar_p.add_argument(
+        "--resolution",
+        required=True,
+        help="log_anyway / log_corrected / discard",
+    )
+    resolve_clar_p.add_argument("--json", help="Corrected touchpoint payload (log_corrected only). '-' for stdin.")
+    resolve_clar_p.add_argument("--json-file", help="Path to corrected touchpoint payload (log_corrected only).")
+    resolve_clar_p.add_argument(
+        "--event-source",
+        dest="event_source",
+        default=None,
+        help="Override the source label for the clarification_resolved event (default: app:resolve-clarification).",
+    )
+    resolve_clar_p.set_defaults(func=cmd_resolve_clarification)
 
     prep_p = sub.add_parser("prep", help="Prepare for a contact")
     prep_p.add_argument("--name", required=True)

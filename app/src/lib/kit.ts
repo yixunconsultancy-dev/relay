@@ -446,6 +446,36 @@ export interface RenameContactResult {
   message: string;
 }
 
+// ---- Clarifications ----
+
+export interface ResolveClarificationResult {
+  ok: boolean;
+  id: string;
+  resolution: "log_anyway" | "log_corrected" | "discard";
+  logged_touchpoint_id: string | null;
+  message: string;
+}
+
+/** Resolve a queued clarification. For log_corrected, pass the corrected
+ *  touchpoint payload; the kit will validate and call log_touchpoint with it. */
+export async function resolveClarification(
+  clarificationId: string,
+  resolution: "log_anyway" | "log_corrected" | "discard",
+  correctedPayload?: TouchpointInputPayload
+): Promise<ResolveClarificationResult> {
+  const args = [
+    "--format=json",
+    "resolve-clarification",
+    "--id", clarificationId,
+    "--resolution", resolution,
+  ];
+  if (resolution === "log_corrected" && !correctedPayload) {
+    throw new Error("log_corrected requires a correctedPayload");
+  }
+  const r = await runKit(args, resolution === "log_corrected" ? correctedPayload as unknown as object : undefined);
+  return parseKitJson<ResolveClarificationResult>(r);
+}
+
 export async function renameContact(
   contactId: string,
   newName: string

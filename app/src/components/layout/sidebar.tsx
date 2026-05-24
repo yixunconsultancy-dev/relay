@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
   Sun,
   Users,
@@ -21,6 +22,7 @@ import {
   useAllReminders,
   useAllTouchpoints,
   useContacts,
+  usePendingClarifications,
 } from "@/lib/queries";
 import { computeDebt } from "@/lib/debt";
 
@@ -36,6 +38,7 @@ const NAV: NavItem[] = [
   { to: "/contacts", label: "Contacts", icon: Users, enabled: true },
   { to: "/reminders", label: "Reminders", icon: Bell, enabled: true },
   { to: "/debt", label: "Debt", icon: AlertTriangle, enabled: true },
+  { to: "/clarifications", label: "Clarify", icon: AlertCircle, enabled: true },
   { to: "/daily-focus", label: "Daily Focus", icon: CalendarDays, enabled: true },
   { to: "/documents", label: "Documents", icon: FileText, enabled: true },
   { to: "/activity", label: "Activity", icon: Activity, enabled: true },
@@ -59,9 +62,15 @@ function useDebtCount(): number {
   }, [contacts.data, touchpoints.data, reminders.data]);
 }
 
+function useClarificationCount(): number {
+  const q = usePendingClarifications();
+  return q.data?.length ?? 0;
+}
+
 export function Sidebar() {
   const sync = useSyncStatus();
   const debtCount = useDebtCount();
+  const clarificationCount = useClarificationCount();
   const lastSyncedAt = sync.lastSyncedAt
     ? new Date(sync.lastSyncedAt).toISOString()
     : null;
@@ -103,7 +112,12 @@ export function Sidebar() {
               </div>
             );
           }
-          const badge = item.to === "/debt" && debtCount > 0 ? debtCount : null;
+          const badge =
+            item.to === "/debt" && debtCount > 0
+              ? debtCount
+              : item.to === "/clarifications" && clarificationCount > 0
+                ? clarificationCount
+                : null;
           return (
             <NavLink
               key={item.to}
