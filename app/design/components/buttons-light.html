@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AWM buttons — light (Cypress Ledger)</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
+<style>
+  /* Cypress Ledger palette per ../../../design.md
+     bg #FAF7F0  paper #FFFDF8  surface #F3EBDD  border #D8CDBA
+     ink #18231E  text #1B1B18  text-muted #777064  gold #C6A34F  clay-error #9F514A
+  */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #FAF7F0; font-family: 'Barlow', sans-serif; padding: 20px 24px; color: #1B1B18; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #777064; min-width: 70px; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 0 20px; height: 38px; border-radius: 2px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border: none; cursor: pointer; transition: all 180ms ease; }
+  .btn-primary { background: #18231E; color: #FFFDF8; }
+  .btn-primary:hover { background: #22372D; }
+  .btn-secondary { background: transparent; color: #18231E; border: 1px solid #D8CDBA; }
+  .btn-secondary:hover { border-color: #B9AA8D; background: rgba(24,35,30,0.04); }
+  .btn-accent { background: transparent; color: #815D46; border: 1px solid rgba(198,163,79,0.6); }
+  .btn-accent:hover { background: rgba(198,163,79,0.12); border-color: #C6A34F; }
+  .btn-danger { background: transparent; color: #9F514A; border: 1px solid rgba(159,81,74,0.5); }
+  .btn-sm { height: 30px; padding: 0 14px; font-size: 10px; }
+  .btn-lg { height: 48px; padding: 0 28px; font-size: 13px; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  hr { border: none; border-top: 1px solid #D8CDBA; margin: 4px 0 10px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="label">Primary</div>
+    <button class="btn btn-primary">Schedule Call</button>
+    <button class="btn btn-primary btn-sm">Schedule Call</button>
+    <button class="btn btn-primary btn-lg">Get Started</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Secondary</div>
+    <button class="btn btn-secondary">Learn More</button>
+    <button class="btn btn-secondary btn-sm">Learn More</button>
+    <button class="btn btn-secondary" disabled>Disabled</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Gold Accent</div>
+    <button class="btn btn-accent">View Policy</button>
+    <button class="btn btn-accent btn-sm">View Policy</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Danger</div>
+    <button class="btn btn-danger">Remove Client</button>
+  </div>
+</body>
+</html>

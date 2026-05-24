@@ -43,17 +43,24 @@ Things from the AWM Design System that were considered and skipped:
 
 ## Light mode
 
-The mockup and all the component preview HTMLs are **dark mode only**.
-The MVP must support both `awm-light` and `awm-dark`. For light-mode
-colour values, see the kit's `../../design.md` — it contains both schemes
-in `:root[data-scheme="awm-light"]` and `:root[data-scheme="awm-dark"]`
-blocks. The light scheme follows the same component vocabulary as dark
-(same buttons, same badges, same cards) with inverted backgrounds and
-darker text.
+The dark-reference mockup and most component preview HTMLs are
+**dark mode only**. The MVP supports both `awm-light` and `awm-dark`.
+For light-mode colour values, see the kit's `../../design.md` — it
+contains both schemes in `:root[data-scheme="awm-light"]` and
+`:root[data-scheme="awm-dark"]` blocks. The light scheme ("Cypress
+Ledger") uses cream paper (`#FAF7F0`), cypress ink (`#18231E`), deeper
+gold (`#815D46` for accents on light surfaces), and muted earth tones
+for status (moss/clay/sand).
 
-A useful next step for someone building the app would be to generate
-light-mode versions of the most-used component preview HTMLs
-(`buttons.html`, `badges.html`, `forms.html`, `cards.html`) so the
-visual targets exist for both themes. Not blocking for MVP — Tailwind
-+ shadcn/ui give you both modes for free when the theme tokens are
-populated correctly.
+Light-mode reference HTMLs exist for the four most-used components:
+
+| File | Source palette |
+|---|---|
+| `components/buttons-light.html` | Primary uses ink (`#18231E`) on paper; secondary uses border-only; accent uses deeper gold |
+| `components/badges-light.html` | Cyan removed (forbidden in AWM palette per `design.md:72`); routed to deep moss for "info" semantics |
+| `components/forms-light.html` | Fields sit on white (`#FFFDF8`) over the cream body so they're visually distinct |
+| `components/cards-light.html` | Cards on white surface with cypress-ink heads, gold accent retained for stats |
+
+For the other 9 component HTMLs (colors, type ramps, shadows, spacing,
+data-viz), the dark versions remain canonical for visual review — the
+light values for those are in `design.md` and can be derived directly.

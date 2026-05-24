@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AWM badges — light (Cypress Ledger)</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
+<style>
+  /* Cypress Ledger palette per ../../../design.md
+     Status colors per AWM tones: success = moss #6F7A55, warning = #B58B3B, error = clay #9F514A.
+     No cyan/blue (design.md:72 forbids these in the AWM palette).
+  */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #FAF7F0; padding: 20px 24px; color: #1B1B18; font-family: 'Barlow', sans-serif; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #815D46; margin-bottom: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 2px; font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .b-gold    { background: rgba(198,163,79,0.18); color: #815D46; border: 1px solid rgba(198,163,79,0.45); }
+  .b-green   { background: rgba(111,122,85,0.15); color: #6F7A55; border: 1px solid rgba(111,122,85,0.4); }
+  .b-red     { background: rgba(159,81,74,0.12); color: #9F514A; border: 1px solid rgba(159,81,74,0.35); }
+  /* Replaces b-cyan from dark scheme — cyan is forbidden in AWM palette.
+     Routed to deep moss for "info / power" semantics. */
+  .b-info    { background: rgba(34,55,45,0.10); color: #22372D; border: 1px solid rgba(34,55,45,0.3); }
+  .b-cognac  { background: rgba(129,93,70,0.12); color: #815D46; border: 1px solid rgba(129,93,70,0.35); }
+  .b-neutral { background: rgba(24,35,30,0.04); color: #777064; border: 1px solid #D8CDBA; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+</style>
+</head>
+<body>
+  <div class="label">Status Badges</div>
+  <div class="row">
+    <span class="badge b-green"><span class="dot"></span>Active</span>
+    <span class="badge b-gold"><span class="dot"></span>Pending</span>
+    <span class="badge b-red"><span class="dot"></span>Lapsed</span>
+    <span class="badge b-neutral"><span class="dot"></span>Draft</span>
+  </div>
+  <div class="label">Product Tags</div>
+  <div class="row">
+    <span class="badge b-gold">IUL</span>
+    <span class="badge b-cognac">UL</span>
+    <span class="badge b-info">PWV</span>
+    <span class="badge b-neutral">Term</span>
+  </div>
+  <div class="label">Tier / Rank</div>
+  <div class="row">
+    <span class="badge b-gold">Elite Tier</span>
+    <span class="badge b-info">Power Law</span>
+    <span class="badge b-green">Top 6%</span>
+    <span class="badge b-neutral">Masterclass</span>
+  </div>
+</body>
+</html>
