@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Cake,
   ChevronRight,
   Plus,
+  Sparkles,
   Sun,
 } from "lucide-react";
 
@@ -28,6 +30,8 @@ import {
   DEBT_CATEGORY_LABEL,
   DEBT_CATEGORY_TONE,
 } from "@/lib/debt";
+import { computeRipeSignals } from "@/lib/ripe";
+import { upcomingBirthdays } from "@/lib/birthdays";
 import { getDb } from "@/lib/db";
 import type { TouchpointRow } from "@/lib/schema";
 import {
@@ -104,6 +108,17 @@ export function HomeRoute() {
     );
   }, [contacts.data, touchpoints.data, reminders.data]);
   const debtPreview = debt.slice(0, 5);
+
+  const ripe = useMemo(() => {
+    if (!contacts.data || !touchpoints.data) return [];
+    return computeRipeSignals(contacts.data, touchpoints.data, new Date());
+  }, [contacts.data, touchpoints.data]);
+  const ripePreview = ripe.slice(0, 5);
+
+  const birthdays = useMemo(() => {
+    if (!contacts.data) return [];
+    return upcomingBirthdays(contacts.data, new Date());
+  }, [contacts.data]);
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => completeReminder(id),
@@ -255,6 +270,109 @@ export function HomeRoute() {
                   <Link
                     to={`/contacts/${f.contact.id}`}
                     aria-label={`Open ${f.contact.name}`}
+                  >
+                    <ChevronRight className="h-4 w-4 text-fg-subtle" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section>
+          <h2 className="awm-label mb-3 inline-flex items-center gap-1.5">
+            <Sparkles className="h-3 w-3" />
+            Ripe to reach out
+          </h2>
+          {contacts.isPending || touchpoints.isPending ? (
+            <p className="text-sm text-fg-muted">Loading…</p>
+          ) : ripe.length === 0 ? (
+            <p className="rounded-sm border border-border bg-bg-surface p-4 text-sm text-fg-muted italic">
+              No prospects showing strong engagement signals right now.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {ripePreview.map((r) => (
+                <li
+                  key={r.contact.id}
+                  className="rounded-sm border border-border bg-bg-surface p-3 flex items-center gap-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/contacts/${r.contact.id}`}
+                      className="font-body text-sm font-semibold text-fg hover:text-gold transition-colors"
+                    >
+                      {r.contact.name}
+                    </Link>
+                    <p className="text-xs text-fg-muted mt-0.5">
+                      {r.positiveCount} positive touchpoint
+                      {r.positiveCount === 1 ? "" : "s"} in last 30d ·{" "}
+                      {r.daysSinceLast === 0
+                        ? "talked today"
+                        : `${r.daysSinceLast}d since last`}
+                    </p>
+                  </div>
+                  <span className="font-condensed text-[10px] font-bold tracking-wider text-gold tabular-nums bg-gold/[0.12] border border-gold-dim rounded-sm px-1.5 py-0.5 leading-none">
+                    {r.score}
+                  </span>
+                  <Link
+                    to={`/contacts/${r.contact.id}`}
+                    aria-label={`Open ${r.contact.name}`}
+                  >
+                    <ChevronRight className="h-4 w-4 text-fg-subtle" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section>
+          <h2 className="awm-label mb-3 inline-flex items-center gap-1.5">
+            <Cake className="h-3 w-3" />
+            Coming up this week
+          </h2>
+          {contacts.isPending ? (
+            <p className="text-sm text-fg-muted">Loading…</p>
+          ) : birthdays.length === 0 ? (
+            <p className="rounded-sm border border-border bg-bg-surface p-4 text-sm text-fg-muted italic">
+              No birthdays in the next 7 days.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {birthdays.map((b) => (
+                <li
+                  key={b.contact.id}
+                  className="rounded-sm border border-border bg-bg-surface p-3 flex items-center gap-3"
+                >
+                  <div className="flex flex-col items-center min-w-12">
+                    <span className="text-xs text-fg/85 tabular-nums">
+                      {b.monthDay}
+                    </span>
+                    <span className="text-[10px] text-fg-subtle uppercase tracking-wider mt-0.5">
+                      {b.daysUntil === 0
+                        ? "today"
+                        : b.daysUntil === 1
+                          ? "tomorrow"
+                          : `in ${b.daysUntil}d`}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/contacts/${b.contact.id}`}
+                      className="font-body text-sm font-semibold text-fg hover:text-gold transition-colors"
+                    >
+                      {b.contact.name}
+                    </Link>
+                    {b.ageTurning !== null && (
+                      <p className="text-xs text-fg-muted mt-0.5">
+                        turning {b.ageTurning}
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    to={`/contacts/${b.contact.id}`}
+                    aria-label={`Open ${b.contact.name}`}
                   >
                     <ChevronRight className="h-4 w-4 text-fg-subtle" />
                   </Link>
