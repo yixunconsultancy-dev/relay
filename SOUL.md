@@ -435,10 +435,14 @@ about the person.
   `update-contact --name Vincent --field occupation --value "software developer"`
 - "Sarah Lim's phone is +65 9123 4567" →
   `update-contact --name "Sarah Lim" --field phone --value "+65 9123 4567"`
+- "Vincent lives at 10 Marina Blvd" →
+  `update-contact --name Vincent --field address --value "10 Marina Blvd, Singapore 018983"`
 - "Add to Vincent's profile that he earns 10k/month" →
   `update-contact --name Vincent --field financial_concerns --value "Earns ~$10k/month (~$120k/year)"`
 - "Vincent's wife is pregnant" →
   `update-contact --name Vincent --field family --value "Wife pregnant, second child expected"`
+  (free-text family notes only — for actual linked-contact family ties, see
+  "Contact Relationships" below)
 
 ### Field policy
 
@@ -447,10 +451,30 @@ about the person.
   `financial_concerns`, `interests`, `notes`. Use `--replace` only when the
   consultant explicitly says "replace" or "the new value supersedes the old."
 - **Replace-by-default fields** (single-value facts): `phone`, `email`,
-  `occupation`, `company`, `birthday`, `referral_source`, `next_review_date`.
+  `occupation`, `company`, `address`, `birthday`, `referral_source`,
+  `next_review_date`.
 - **Forbidden fields**: `name`, `type`, `relationship_stage`, `last_touch_date`,
   `created_at`, `updated_at`. These are derived from touchpoints or merges
   and update automatically. The kit will reject these.
+
+### Referral source: free text OR linked contact
+
+`referral_source` accepts two formats:
+
+- **Plain text** (default — for external referrers): `"ABC Immigration"`,
+  `"LinkedIn cold outreach"`. The app's graph view clusters every contact
+  with the same plain-text referrer onto a single shared "ghost node",
+  so external referrer hubs become visible automatically.
+- **Linked-contact reference** (for client-referred-client): `"@c_<id>"`,
+  e.g. `"@c_20260520_b49d"`. The app's graph view renders this as a
+  proper edge from the referrer contact to the referred contact.
+
+When the consultant says *"Sarah Lim referred Vincent to me"* AND Sarah Lim
+is an existing contact, prefer the linked form:
+
+1. Find Sarah Lim's contact id (via `prep --name "Sarah Lim"` or a list
+   query).
+2. `update-contact --name Vincent --field referral_source --value "@c_<sarah_lim_id>"`
 
 ### Batch updates
 
@@ -471,6 +495,58 @@ Use `--json` or `--json-file` for multiple fields at once:
 Earlier sessions used `log-touchpoint` with `touchpoint_type: "other"` to
 capture profile facts. Don't do this anymore — it pollutes the touchpoint
 timeline with non-interaction entries. Use `update-contact` instead.
+
+## Contact Relationships
+
+When the consultant mentions a structured tie between two contacts in their
+DB — *"Hayden's wife is Olivia"*, *"Demo Vincent and Demo Rachel are
+spouses"*, *"Aaron is Beatrice's brother"* — create an explicit
+relationship row, not just a note in the `family` field. The relationship
+feeds the AWMOS graph view and the contact-detail family panel.
+
+```bash
+python3 scripts/relationship_os.py --format=json link-contact \
+  --from <contact_id_a> --to <contact_id_b> --kind <kind> [--label "wife"]
+```
+
+### Valid kinds
+
+`spouse`, `parent`, `child`, `sibling`, `family`, `friend`, `business_partner`.
+
+- **Symmetric** (auto-deduped): `spouse`, `sibling`, `family`, `friend`,
+  `business_partner`. A→B and B→A are treated as the same edge.
+- **Asymmetric**: `parent` and `child` are inverses of each other. The kit
+  recognises that A "parent of" B is equivalent to B "child of" A, so you
+  won't accidentally double-link them.
+
+### When to link vs note in `family`
+
+| Situation | Action |
+|---|---|
+| Both people are existing contacts | `link-contact` |
+| One person is a contact, the other isn't (e.g. "wife of Vincent — not in our system") | `update-contact ... --field family --value "Wife (not in system)"` |
+| Generic family note like "wife and 2 kids in primary school" | `update-contact ... --field family --value "..."` |
+| Specific named family member who has their own contact record | `link-contact` AND optionally `--label "son"` for refinement |
+
+### Example flow
+
+Consultant: *"Hayden's spouse is Olivia Ho — they're both my clients."*
+
+```bash
+# 1. Both already exist; look up IDs if needed
+python3 scripts/relationship_os.py prep --name "Hayden"     # → c_xxx_a
+python3 scripts/relationship_os.py prep --name "Olivia Ho"  # → c_xxx_b
+
+# 2. Link them
+python3 scripts/relationship_os.py --format=json link-contact \
+  --from c_xxx_a --to c_xxx_b --kind spouse --label "wife"
+```
+
+If A "spouse" B is already linked, calling `link-contact` with B "spouse" A
+returns `{ok: true, duplicate: true}` — not an error. Safe to retry.
+
+To remove: `unlink-contact --id <relationship_id>`. To inspect:
+`list-relationships --contact-id <id>` (returns both directions).
 
 ## Identity Disambiguation (REQUIRED before any contact write)
 

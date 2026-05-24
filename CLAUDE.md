@@ -3,15 +3,26 @@
 You are a setup and maintenance assistant for the AWM Relationship OS Kit.
 For runtime behavior, `SOUL.md` is the source of truth for the Hermes agent.
 
-The v0 product is a private relationship-tracking assistant for a financial
-consultant (FC). It captures notes, updates contacts, logs touchpoints, creates
-follow-up reminders, and supports daily focus and meeting prep.
+This is a private relationship-tracking system for a financial consultant
+(FC). It captures notes, updates contacts, logs touchpoints, manages
+structured policies, creates follow-up reminders, surfaces relationship
+debt and ripe-to-reach-out signals, and renders the network as an
+Obsidian-style graph. Two surfaces:
 
-Product data rule: the agent's structured source of truth is the consultant's
-local SQLite Relationship OS database. Google Sheets, local CSV, and Obsidian
-Markdown are consultant-facing views mirrored from SQLite. Input comes via
-Telegram natural-language messages. You parse, structure, and store - you do
-not generate outbound messages to clients.
+- **Telegram + Hermes** — natural-language capture from anywhere. Hermes
+  parses, the kit validates, SQLite stores.
+- **AWMOS desktop app** (Tauri + React) at `/Applications/AWMOS.app` —
+  the daily-use surface on the consultant's Mac. Reads the same SQLite
+  directly, shells out to the kit for validated writes. Polls an Events
+  audit table to refresh when Hermes writes from Telegram.
+
+Product data rule: the structured source of truth is the consultant's
+local SQLite Relationship OS database (`data/relationship_os.sqlite3`).
+Google Sheets, local CSV, and Obsidian Markdown remain as optional
+export-only views, not the daily edit surface. Input comes via Telegram
+natural-language messages (Hermes) or direct edits in the desktop app.
+You parse, structure, and store — you do not generate outbound messages
+to clients.
 
 ## Core Capabilities
 
@@ -88,6 +99,31 @@ On request or at start of day:
 - Convert voice reflections into structured journal entries
 - Flag repeated bottlenecks
 
+The desktop app's Today screen synthesises this automatically: daily
+activity score + 7-day heatmap, reminders due now, top relationship-debt
+items, ripe-to-reach-out signals, and birthdays this week. The Python
+kit's `today-brief` command returns the same composite as JSON/text for
+delivery to Telegram via Hermes's `/cron` (see `MORNING_BRIEF_SETUP.md`).
+
+### 8. Network awareness
+
+When the consultant mentions structured ties between two existing
+contacts (Hayden's wife is Olivia; ABC Immigration referred Charles),
+create explicit relationship rows via `link-contact`, or set
+`referral_source` (plain text for external referrers like "ABC
+Immigration", `@c_<id>` for client-referred-client). The app's `/graph`
+route renders the network as an Obsidian-style force-directed view —
+contacts as colored nodes, family/referral/friend ties as colored
+edges, plain-text external referrers as shared ghost-node hubs.
+
+### 9. Low-confidence handling (bulk imports)
+
+When parsing a batch (Excel of clients, forwarded thread of 5+ messages,
+multiple screenshots) and confidence on a row is low, **queue it** via
+`queue-clarification` instead of guessing or asking inline one-by-one.
+The consultant triages later in the app's `/clarifications` route. See
+`SOUL.md` "Low-confidence handling" for the inline-vs-queue decision.
+
 ## Parsing Rules
 
 Hermes is the parser; `scripts/relationship_os.py` is a typed write API and
@@ -136,10 +172,7 @@ Kit-level:
 - `TELEGRAM_BOT_SETUP.md` — How to set up the Telegram bot
 - `TROUBLESHOOTING.md` — Common issues and fixes
 - `EXAMPLE_DATA.md` — Sample data for the demo flow
-- `HANDOFF_REVIEW_BRIEF.md` — Per-release handoff brief for reviewers
-- `APP_BUG_FIX_BRIEF_FOR_CLAUDECODE.md` — Bug-fix and polish pass history
-- `FEATURE_BUNDLE_BRIEF_20260521.md` — Active feature bundle scope
-- `MORNING_BRIEF_SETUP.md` — Install / manage the 9am Telegram morning brief launchd job
+- `MORNING_BRIEF_SETUP.md` — Install / manage the 9am Telegram morning brief (Hermes cron primary, launchd fallback)
 - `design.md`, `branding_assets_spec.md` — Deliverable design schemas and asset spec
 
 App-level (`app/`):
@@ -148,11 +181,31 @@ App-level (`app/`):
 - `app/DECISIONS.md` — Per-phase architectural and dependency decisions
 - `app/README.md` — App build/test commands
 - `app/CLAUDE_CODE_KICKOFF.md` — Original kickoff prompt for the agent that built the app
-- `app/design/README.md` — Index of design references (component HTMLs, dark-mode mockup, CSS tokens)
+- `app/design/README.md` — Index of design references (component HTMLs, dark + light scheme mockups, CSS tokens)
+
+App routes (`app/src/routes/`):
+
+- `/` — Today: greeting, daily score + 7-day heatmap, reminders due, debt preview, ripe-to-reach-out, birthdays this week, today's logged touchpoints
+- `/contacts` — Contacts table with type/stage filters
+- `/contacts/:id` — Contact detail: editable profile, touchpoint timeline, policies, generated documents, family/relationships panel
+- `/graph` — Obsidian-style force-directed graph of contacts + ghost referrers
+- `/reminders` — Kanban: Due Today / Pending / Snoozed / Done
+- `/debt` — Relationship debt inbox (at_risk / unfollowed_action / cooling / stale_prospect)
+- `/clarifications` — Triage queue for low-confidence Hermes bulk-import items
+- `/daily-focus` — Per-day journal editor
+- `/documents` — Browser for PDF/PPTX/MD generated by the kit
+- `/activity` — Reverse-chronological audit timeline of every kit write
+- `/settings` — Consultant name, timezone, vault dir, theme, deliverable scheme, Hermes connection status
 
 Tests:
 
-- `tests/test_relationship_os.py` — Python kit unit + integration tests (~46)
+- `tests/test_relationship_os.py` — Python kit unit + integration tests (~63)
 - `tests/test_concurrent_writes.py` — Subprocess soak test for app↔Hermes concurrency (1)
-- `app/src/lib/*.test.ts` — TypeScript tests for mutations and polling (~28)
-- `app/src-tauri/src/lib.rs` (inline `#[cfg(test)]`) — Rust tests for argv injection and filename parsing (~11)
+- `app/src/lib/*.test.ts` — TypeScript tests for mutations, polling, debt, score, ripe signals, birthdays, graph (~85)
+- `app/src-tauri/src/lib.rs` (inline `#[cfg(test)]`) — Rust tests for argv injection and filename parsing (~12)
+
+History note: earlier briefs `HANDOFF_REVIEW_BRIEF.md`,
+`APP_BUG_FIX_BRIEF_FOR_CLAUDECODE.md`, and
+`FEATURE_BUNDLE_BRIEF_20260521.md` were deleted on 2026-05-25 — all their
+items shipped and the briefs were stale. Recover from git history if
+needed (e.g. `git log --all --oneline -- HANDOFF_REVIEW_BRIEF.md`).
