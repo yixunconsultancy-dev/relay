@@ -523,6 +523,30 @@ export function ContactDetailRoute() {
           </div>
 
           <div className="mt-6 space-y-4">
+            <Field label="Address" htmlFor="address">
+              <Textarea
+                id="address"
+                rows={2}
+                value={values.address}
+                onChange={(e) => update("address", e.target.value)}
+              />
+            </Field>
+            <Field label="Financial concerns" htmlFor="financial_concerns">
+              <Textarea
+                id="financial_concerns"
+                rows={3}
+                value={values.financial_concerns}
+                onChange={(e) => update("financial_concerns", e.target.value)}
+              />
+            </Field>
+            <Field label="Interests" htmlFor="interests">
+              <Textarea
+                id="interests"
+                rows={2}
+                value={values.interests}
+                onChange={(e) => update("interests", e.target.value)}
+              />
+            </Field>
             <Field label="Family" htmlFor="family">
               <Textarea
                 id="family"
@@ -549,22 +573,6 @@ export function ContactDetailRoute() {
                 />
               </Field>
             )}
-            <Field label="Financial concerns" htmlFor="financial_concerns">
-              <Textarea
-                id="financial_concerns"
-                rows={3}
-                value={values.financial_concerns}
-                onChange={(e) => update("financial_concerns", e.target.value)}
-              />
-            </Field>
-            <Field label="Interests" htmlFor="interests">
-              <Textarea
-                id="interests"
-                rows={2}
-                value={values.interests}
-                onChange={(e) => update("interests", e.target.value)}
-              />
-            </Field>
             <Field label="Notes" htmlFor="notes">
               <Textarea
                 id="notes"

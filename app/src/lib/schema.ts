@@ -22,6 +22,7 @@ export interface ContactRow {
   email: string;
   occupation: string;
   company: string;
+  address: string;
   birthday: string;
   family: string;
   policies: string;
@@ -196,6 +197,7 @@ export const EDITABLE_CONTACT_FIELDS = [
   "email",
   "occupation",
   "company",
+  "address",
   "birthday",
   "family",
   "policies",

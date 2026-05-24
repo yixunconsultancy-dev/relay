@@ -1142,6 +1142,26 @@ Assets: logo_dark.png, bg_mountain_clouds.png, bg_network_mesh.png.
             payload = json.loads(latest["payload"])
             self.assertIn("occupation", payload["diff"])
 
+    def test_update_contact_accepts_address_field(self):
+        """address is in CONSULTANT_MANAGED_FIELDS and accepts updates."""
+        with tempfile.TemporaryDirectory() as tmp:
+            env = self.sqlite_csv_env(Path(tmp))
+            self.run_cli(["init", "--reset"], env)
+            logged = self.run_json_cli(
+                ["log-touchpoint", "--json", json.dumps(self.sample_touchpoint_payload())], env,
+            )
+            cid = logged["contact"]["id"]
+            payload = {
+                "id": cid,
+                "updates": {"address": "10 Marina Blvd, Singapore 018983"},
+                "source": "app:edit-contact",
+            }
+            result = self.run_json_cli(["update-contact", "--json", json.dumps(payload)], env)
+            self.assertIn("address", result["diff"])
+            self.assertEqual(
+                result["diff"]["address"]["to"], "10 Marina Blvd, Singapore 018983"
+            )
+
     def test_queue_and_list_clarifications(self):
         """queue-clarification appends to the queue; list-clarifications returns pending by default."""
         with tempfile.TemporaryDirectory() as tmp:

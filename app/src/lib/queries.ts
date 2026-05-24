@@ -17,7 +17,7 @@ import type {
 } from "@/lib/schema";
 
 const ALL_CONTACT_COLS =
-  '"id","name","type","relationship_stage","phone","email","occupation","company","birthday","family","policies","financial_concerns","interests","referral_source","next_review_date","last_touch_date","notes","archived_at","created_at","updated_at"';
+  '"id","name","type","relationship_stage","phone","email","occupation","company","address","birthday","family","policies","financial_concerns","interests","referral_source","next_review_date","last_touch_date","notes","archived_at","created_at","updated_at"';
 
 const ALL_TOUCHPOINT_COLS =
   '"id","contact_id","contact_name","date","type","sentiment","summary","topics","action_items","meeting_number","raw_input","notes","created_at"';
