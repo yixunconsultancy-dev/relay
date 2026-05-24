@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 
-import { fetchActivityEvents } from "@/lib/queries";
+import { useAllTouchpoints } from "@/lib/queries";
 import {
   compute7DayHeatmap,
   computeDailyScore,
@@ -14,39 +13,26 @@ interface Props {
   today: string; // YYYY-MM-DD in the consultant's timezone
 }
 
-/** Local-date YYYY-MM-DD minus N days. Mirrors the pure helper in lib/score. */
-function isoDaysAgo(today: string, days: number): string {
-  const d = new Date(today + "T00:00:00");
-  d.setDate(d.getDate() - days);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 /**
  * Compact stat card for the Today header: today's activity score + 7-day
- * heatmap. Reads from the events table directly via fetchActivityEvents.
+ * heatmap. Reads from the touchpoints table (the consultant's actual
+ * activity), NOT the events table (which would credit data-entry days).
  *
- * Score weights live in lib/score.ts. The card auto-refreshes via the events
- * polling loop (queryKey shape matches what dispatchInvalidations refreshes
- * when relevant kinds arrive).
+ * Score = touchpoints whose `date` field falls on each day × 10, excluding
+ * type='import' (those are bulk historical imports, not real activity).
  */
 export function DailyScoreCard({ today }: Props) {
-  // Pull 7-days-back of events, generous LIMIT so even a heavy day fits.
-  const since = isoDaysAgo(today, 6); // inclusive of today = 7 days total
-  const events = useQuery({
-    queryKey: ["score", "events-since", since],
-    queryFn: () => fetchActivityEvents({ since, limit: 1000 }),
-  });
+  const touchpoints = useAllTouchpoints();
 
   const heatmap = useMemo(() => {
-    if (!events.data) return null;
-    return compute7DayHeatmap(events.data, today);
-  }, [events.data, today]);
+    if (!touchpoints.data) return null;
+    return compute7DayHeatmap(touchpoints.data, today);
+  }, [touchpoints.data, today]);
 
   const todayScore = useMemo(() => {
-    if (!events.data) return 0;
-    return computeDailyScore(events.data, today);
-  }, [events.data, today]);
+    if (!touchpoints.data) return 0;
+    return computeDailyScore(touchpoints.data, today);
+  }, [touchpoints.data, today]);
 
   const avg = heatmap ? heatmapAverage(heatmap) : 0;
   const max = heatmap ? heatmapMax(heatmap) : 1;
@@ -57,7 +43,7 @@ export function DailyScoreCard({ today }: Props) {
       <div className="flex flex-col">
         <span className="awm-label">Today's score</span>
         <span className="font-display text-3xl font-light text-gold leading-none tabular-nums">
-          {events.isPending ? "—" : todayScore}
+          {touchpoints.isPending ? "—" : todayScore}
         </span>
         <span className="mt-1 text-[10px] text-fg-subtle tabular-nums">
           7-day avg {avg}

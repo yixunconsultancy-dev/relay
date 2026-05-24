@@ -1,66 +1,56 @@
-// Daily activity score + 7-day heatmap, computed from the events table.
+// Daily activity score + 7-day heatmap.
 //
-// Pure functions over EventRow[] so they're trivial to test. The home screen
-// passes in events from `fetchActivityEvents()` filtered to the last N days
-// and the functions slice + sum by date.
+// Score reflects ACTIVITY DATES, not data-entry dates:
+//   Score for date D = (touchpoints whose `date` field = D, excluding
+//   type='import') × 10
+//
+// "import" type touchpoints are bulk historical reconstruction, not real
+// consultant activity, so they don't count — same exclusion the Today
+// screen uses in fetchTouchpointsForDate.
+//
+// Why touchpoints (and not events): events.timestamp records WHEN the row
+// was logged into the system. Touchpoint.date records WHEN the meeting/call
+// actually happened. The latter is what the consultant cares about — bulk
+// logging a week's worth of meetings on Friday shouldn't spike Friday and
+// leave Mon-Thu empty.
 
-import type { EventRow } from "@/lib/schema";
+import type { TouchpointRow } from "@/lib/schema";
 
-/** Weights per event kind. Tuned so a normal-good day lands around 30-50. */
-export const EVENT_WEIGHTS: Record<string, number> = {
-  // Real consultant work — most points
-  touchpoint_logged: 10,
-  contact_created: 15,
-  policy_created: 8,
-  contact_merged: 6,
-  // Follow-through — moderate points
-  reminder_completed: 5,
-  contact_renamed: 3,
-  contact_updated: 2,
-  policy_updated: 2,
-  // Maintenance — minimal credit, but not zero (still activity)
-  contact_archived: 1,
-  contact_unarchived: 1,
-  policy_archived: 1,
-  // Negative-signal / non-progress — explicitly zero so they don't game the score
-  reminder_snoozed: 0,
-  reminder_cancelled: 0,
-  reminder_duplicate_skipped: 0,
-};
+export const TOUCHPOINT_WEIGHT = 10;
+const IMPORT_TYPE = "import";
 
-const DEFAULT_WEIGHT = 1;
-
-function weightFor(kind: string): number {
-  return EVENT_WEIGHTS[kind] ?? DEFAULT_WEIGHT;
-}
-
-/** YYYY-MM-DD slice of an ISO timestamp. */
-export function eventDate(timestamp: string): string {
-  // Timestamps are stored as `YYYY-MM-DDTHH:MM:SS` (no timezone — matches
-  // the consultant's local timezone per the kit's now_iso(). Just slice off
-  // the date portion.
-  return timestamp.slice(0, 10);
-}
-
-/** Sum the event weights for a given date (YYYY-MM-DD). */
-export function computeDailyScore(events: EventRow[], date: string): number {
-  let total = 0;
-  for (const e of events) {
-    if (eventDate(e.timestamp) !== date) continue;
-    total += weightFor(e.kind);
+/** Count of touchpoints on `date` that count toward the score. */
+function countableTouchpointsOn(
+  touchpoints: TouchpointRow[],
+  date: string
+): number {
+  let n = 0;
+  for (const t of touchpoints) {
+    if (t.date !== date) continue;
+    if (t.type === IMPORT_TYPE) continue;
+    n += 1;
   }
-  return total;
+  return n;
+}
+
+/** Sum the activity score for a given YYYY-MM-DD date. */
+export function computeDailyScore(
+  touchpoints: TouchpointRow[],
+  date: string
+): number {
+  return countableTouchpointsOn(touchpoints, date) * TOUCHPOINT_WEIGHT;
 }
 
 export interface HeatmapCell {
   date: string;        // YYYY-MM-DD
-  score: number;       // sum of event weights that day
+  score: number;       // count of real touchpoints × TOUCHPOINT_WEIGHT
+  count: number;       // raw touchpoint count for the tooltip
   isToday: boolean;
 }
 
 /** Return 7 cells, oldest first, ending on `today`. */
 export function compute7DayHeatmap(
-  events: EventRow[],
+  touchpoints: TouchpointRow[],
   today: string
 ): HeatmapCell[] {
   const cells: HeatmapCell[] = [];
@@ -69,9 +59,11 @@ export function compute7DayHeatmap(
     const d = new Date(todayDate);
     d.setDate(d.getDate() - i);
     const iso = isoDate(d);
+    const count = countableTouchpointsOn(touchpoints, iso);
     cells.push({
       date: iso,
-      score: computeDailyScore(events, iso),
+      count,
+      score: count * TOUCHPOINT_WEIGHT,
       isToday: i === 0,
     });
   }
