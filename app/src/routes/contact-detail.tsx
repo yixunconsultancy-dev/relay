@@ -87,8 +87,45 @@ import {
   type EditableContactField,
 } from "@/lib/schema";
 import { formatShortDate, formatRelative, humanize } from "@/lib/format";
+import { FamilyPanel } from "@/components/family-panel";
+import {
+  ReferralLinkButton,
+  parseReferralSource,
+} from "@/components/referral-link-button";
 
 type EditableValues = Record<EditableContactField, string>;
+
+/** Tiny inline hint shown under the referral_source input. If the value
+ *  parses as a contact ID (@c_xxx), look up the contact name and show
+ *  "linked to: Name". Otherwise show "plain text". */
+function ReferralLinkHint({ raw }: { raw: string }) {
+  const parsed = parseReferralSource(raw);
+  const allContacts = useContacts();
+  if (!raw.trim()) {
+    return (
+      <span className="text-[10px] text-fg-subtle">
+        Not set
+      </span>
+    );
+  }
+  if (parsed.linkedContactId) {
+    const c = allContacts.data?.find((x) => x.id === parsed.linkedContactId);
+    return c ? (
+      <span className="text-[10px] text-gold inline-flex items-center gap-1">
+        Linked to <span className="font-semibold">{c.name}</span>
+      </span>
+    ) : (
+      <span className="text-[10px] text-status-error">
+        Linked to unknown contact ({parsed.linkedContactId})
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] text-fg-subtle">
+      Plain text
+    </span>
+  );
+}
 
 function policyDetailRows(policy: PolicyRow): Array<[string, string]> {
   const rows: Array<[string, string | undefined]> = [
@@ -493,7 +530,17 @@ export function ContactDetailRoute() {
                 id="referral_source"
                 value={values.referral_source}
                 onChange={(e) => update("referral_source", e.target.value)}
+                placeholder="Plain text (e.g. ABC Immigration) or click Link"
               />
+              <div className="flex items-center justify-between mt-1.5 gap-2">
+                <ReferralLinkHint
+                  raw={values.referral_source}
+                />
+                <ReferralLinkButton
+                  ownContactId={contactId ?? ""}
+                  onPick={(v) => update("referral_source", v)}
+                />
+              </div>
             </Field>
             <Field
               label="Last touch (auto)"
@@ -553,7 +600,9 @@ export function ContactDetailRoute() {
                 rows={3}
                 value={values.family}
                 onChange={(e) => update("family", e.target.value)}
+                placeholder="Free text — e.g. 'wife and 2 kids in primary school'. Link specific contacts via the panel below."
               />
+              {contactId && <FamilyPanel contactId={contactId} />}
             </Field>
             {/* Legacy free-text policies field — superseded by the structured
                 Policies module on the right panel. Render read-only and only
