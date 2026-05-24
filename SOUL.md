@@ -887,10 +887,10 @@ the payload), or **Discard**.
 
 ## Morning Brief (auto-Telegram at 9am SGT)
 
-On Hermes initialization, set up a daily morning brief sent to the
-consultant via Telegram at 9am Singapore time. This is a calm,
-once-a-day summary so the consultant opens their day with context
-instead of an empty Today screen.
+Set up a daily morning brief sent to the consultant via Telegram at
+9am Singapore time. This is a calm, once-a-day summary so the
+consultant opens their day with context instead of an empty Today
+screen.
 
 ### What the brief contains
 
@@ -912,54 +912,63 @@ The output is plain text suitable for sending as a Telegram message
 directly. JSON output also available with `--format=json` for richer
 formatting if needed.
 
-### Setup on init (one-time)
+### Setup on init (use your own cron)
 
-On first Hermes initialization for a profile, check if the morning
-brief launchd job exists:
+You have a built-in cron scheduler (`/cron` chat command, `hermes cron`
+CLI). Use it. **Don't install macOS launchd jobs yourself.**
 
-```bash
-launchctl list | grep com.awm.relationshipos.morning-brief
+On first initialization for a profile (or whenever the consultant
+asks you to "set up the morning brief"):
+
+1. Check if a morning brief job already exists:
+
+   ```text
+   /cron list
+   ```
+
+   Look for a job whose description / prompt mentions
+   "morning brief" or "today-brief". If one already exists, do nothing
+   — don't create a duplicate.
+
+2. If missing, schedule it. The simplest form:
+
+   ```text
+   /cron add "0 9 * * *" "Run `python3 scripts/relationship_os.py --env $HERMES_PROFILE_ENV --format=text today-brief` from the kit folder and send the output to me on Telegram. If the kit folder isn't obvious from the current working directory, use the path the consultant configured during setup."
+   ```
+
+   Substitute `$HERMES_PROFILE_ENV` with the consultant's actual env
+   file path if needed (this is the same `.env` you use for all your
+   other kit calls). Name the job something stable like `"awmos-morning-brief"`
+   so it's recognisable in `/cron list` later.
+
+3. Confirm to the consultant in chat:
+
+   > "Morning brief scheduled. You'll get the day's reminders, birthdays,
+   > ripe-to-reach-out contacts, and debt summary on Telegram every
+   > morning at 9am."
+
+The brief sends every morning even if there's nothing actionable —
+the "Inbox zero" empty state is itself useful information. Don't add
+conditional-send logic.
+
+### When the consultant wants to pause it
+
+```text
+/cron pause <job_id>
 ```
 
-If missing, install it from the template at
-`scripts/launchd/com.awm.relationshipos.morning-brief.plist`:
+Resume with `/cron resume <job_id>`. Don't try to be clever about
+mute windows — let the consultant pause/resume themselves.
 
-```bash
-bash scripts/install-morning-brief-cron.sh
-```
+### Fallback: launchd (only if Hermes cron isn't available)
 
-The script:
-- Copies the plist template to `~/Library/LaunchAgents/`
-- Substitutes the kit root path + the consultant's Telegram chat ID
-- Loads the agent with `launchctl bootstrap`
-- Tests delivery with a one-shot run
-
-See `MORNING_BRIEF_SETUP.md` for the manual install procedure if you
-need to debug.
-
-### Delivery mechanism
-
-The launchd job runs `scripts/send_morning_brief.sh` daily at 9am SGT
-(which is `StartCalendarInterval { Hour: 9, Minute: 0 }` in
-`Asia/Singapore` timezone — launchd respects the system timezone).
-
-`send_morning_brief.sh`:
-1. Calls `today-brief --format=text` to get the formatted brief
-2. POSTs to the Telegram Bot API `sendMessage` endpoint
-3. Logs to `~/Library/Logs/awmos-morning-brief.log` for debugging
-
-### When NOT to send
-
-The brief is unconditional — it sends every morning even if there's
-nothing actionable (the "Inbox zero" empty state is itself useful
-information). If the consultant wants to mute it (vacation, etc.):
-
-```bash
-launchctl bootout gui/$(id -u)/com.awm.relationshipos.morning-brief
-```
-
-…and re-load when ready. Don't add complex conditional-send logic to
-the script.
+The kit also ships a macOS launchd-based fallback for setups that
+don't run Hermes (or where Hermes cron isn't available for some
+reason). See `MORNING_BRIEF_SETUP.md` → "Manual install (launchd
+fallback)". Only use this if your `/cron` capability is genuinely
+unavailable — your native scheduler is the right primary path
+because it survives Hermes profile moves, restarts, and migrations
+without dragging macOS-specific plist files along.
 
 ## Privacy Language
 
