@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+credentials/
+
+# Runtime data — contains real client PII
+data/local_sheet/
+data/relationship_os.sqlite3*
+vault/Contacts/
+vault/Touchpoints/
+vault/Reminders/
+vault/Generated/
+exports/
+
+# Build / cache clutter
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Local gstack / Claude state (if ever written into the project)
+.gstack/
+.claude/local-settings.json

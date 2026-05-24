@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Barlow:wght@400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; padding: 20px 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .shadow-card { border-radius: 2px; padding: 14px 16px; background: #0E0E0E; border: 1px solid #1A1A1A; }
+  .shadow-label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(198,163,79,0.6); margin-bottom: 4px; }
+  .shadow-desc { font-family: 'Barlow', sans-serif; font-size: 11px; color: rgba(255,255,255,0.3); }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="shadow-card" style="box-shadow: 0 1px 4px rgba(0,0,0,0.45);">
+    <div class="shadow-label">shadow-sm</div>
+    <div class="shadow-desc">Subtle lift · tooltips</div>
+  </div>
+  <div class="shadow-card" style="box-shadow: 0 4px 16px rgba(0,0,0,0.55);">
+    <div class="shadow-label">shadow-md</div>
+    <div class="shadow-desc">Cards · dropdowns</div>
+  </div>
+  <div class="shadow-card" style="box-shadow: 0 8px 32px rgba(0,0,0,0.65);">
+    <div class="shadow-label">shadow-lg</div>
+    <div class="shadow-desc">Modals · panels</div>
+  </div>
+  <div class="shadow-card" style="box-shadow: 0 16px 64px rgba(0,0,0,0.75);">
+    <div class="shadow-label">shadow-xl</div>
+    <div class="shadow-desc">Overlays · hero elements</div>
+  </div>
+  <div class="shadow-card" style="box-shadow: 0 0 24px rgba(198,163,79,0.25);">
+    <div class="shadow-label">shadow-gold</div>
+    <div class="shadow-desc">Gold glow · active states</div>
+  </div>
+  <div class="shadow-card" style="box-shadow: 0 0 8px rgba(0,188,212,0.3);">
+    <div class="shadow-label">shadow-cyan</div>
+    <div class="shadow-desc">Tech accent · data nodes</div>
+  </div>
+</div>
+</body>
+</html>

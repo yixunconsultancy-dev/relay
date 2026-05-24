@@ -1,0 +1,13 @@
+id,contact_id,contact_name,due_date,type,priority,context,status,snoozed_until,source_touchpoint_id,created_at,completed_at
+r_20260520_8112,c_20260520_9c3c,Demo Client,2026-05-29,follow_up,medium,Follow up on retirement planning interest.,pending,,t_20260520_5ea7,2026-05-20T09:32:47,
+r_20260520_c947,c_20260520_3960,Sarah Lim,2026-05-27,follow_up,medium,Follow up next week on protection planning.,pending,,t_20260520_04f9,2026-05-20T09:32:47,
+r_20260520_169a,c_20260520_fc6d,Jason Wong,2026-05-21,follow_up,medium,Prepare closing roleplay for tomorrow's session.,pending,,t_20260520_5882,2026-05-20T09:32:47,
+r_20260520_a67f,c_20260520_9c3c,Demo Client,2026-05-29,follow_up,medium,Follow up on retirement planning interest.,pending,,t_20260520_ac54,2026-05-20T09:37:24,
+r_20260520_8b51,c_20260520_3960,Sarah Lim,2026-05-27,follow_up,medium,Follow up next week on protection planning.,pending,,t_20260520_9da6,2026-05-20T09:37:25,
+r_20260520_6236,c_20260520_fc6d,Jason Wong,2026-05-21,follow_up,medium,Prepare closing roleplay for tomorrow's session.,pending,,t_20260520_2c1a,2026-05-20T09:37:25,
+r_20260520_aee6,c_20260520_9c3c,Demo Client,2026-05-29,follow_up,medium,Follow up on retirement planning interest.,pending,,t_20260520_1282,2026-05-20T09:50:47,
+r_20260520_7aa9,c_20260520_3960,Sarah Lim,2026-05-27,follow_up,medium,Follow up next week on protection planning.,pending,,t_20260520_9bce,2026-05-20T09:50:47,
+r_20260520_dd70,c_20260520_fc6d,Jason Wong,2026-05-21,follow_up,medium,Prepare closing roleplay for tomorrow's session.,pending,,t_20260520_8d4d,2026-05-20T09:50:47,
+r_20260520_d8e6,c_20260520_9c3c,Demo Client,2026-05-29,follow_up,medium,Follow up on retirement planning interest.,pending,,t_20260520_035b,2026-05-20T10:58:59,
+r_20260520_a89f,c_20260520_3960,Sarah Lim,2026-05-27,follow_up,medium,Follow up next week on protection planning.,pending,,t_20260520_ce10,2026-05-20T10:58:59,
+r_20260520_a120,c_20260520_fc6d,Jason Wong,2026-05-21,follow_up,medium,Prepare closing roleplay for tomorrow's session.,pending,,t_20260520_54c1,2026-05-20T10:58:59,

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080808; padding: 20px 24px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(198,163,79,0.5); margin-bottom: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 2px; font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .b-gold    { background: rgba(198,163,79,0.15); color: #C6A34F; border: 1px solid rgba(198,163,79,0.3); }
+  .b-green   { background: rgba(76,175,80,0.12); color: #81C784; border: 1px solid rgba(76,175,80,0.25); }
+  .b-red     { background: rgba(229,115,115,0.12); color: #E57373; border: 1px solid rgba(229,115,115,0.25); }
+  .b-cyan    { background: rgba(0,188,212,0.1); color: #00BCD4; border: 1px solid rgba(0,188,212,0.25); }
+  .b-cognac  { background: rgba(129,93,70,0.2); color: #EFCFA0; border: 1px solid rgba(129,93,70,0.35); }
+  .b-neutral { background: rgba(250,247,244,0.06); color: rgba(250,247,244,0.5); border: 1px solid rgba(250,247,244,0.12); }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+</style>
+</head>
+<body>
+  <div class="label">Status Badges</div>
+  <div class="row">
+    <span class="badge b-green"><span class="dot"></span>Active</span>
+    <span class="badge b-gold"><span class="dot"></span>Pending</span>
+    <span class="badge b-red"><span class="dot"></span>Lapsed</span>
+    <span class="badge b-neutral"><span class="dot"></span>Draft</span>
+  </div>
+  <div class="label">Product Tags</div>
+  <div class="row">
+    <span class="badge b-gold">IUL</span>
+    <span class="badge b-cognac">UL</span>
+    <span class="badge b-cyan">PWV</span>
+    <span class="badge b-neutral">Term</span>
+  </div>
+  <div class="label">Tier / Rank</div>
+  <div class="row">
+    <span class="badge b-gold">Elite Tier</span>
+    <span class="badge b-cyan">Power Law</span>
+    <span class="badge b-green">Top 6%</span>
+    <span class="badge b-neutral">Masterclass</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+key,value
+timezone,Asia/Singapore
+reminder_time,08:00
+reminder_frequency,daily
+follow_up_default_days,7
+review_interval_months,12
+name,Demo Consultant
+vault_dir,vault
+design_path,design.md
+design_scheme,awm-light

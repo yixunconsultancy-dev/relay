@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080808; font-family: 'Barlow', sans-serif; padding: 20px 24px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.25); min-width: 70px; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 0 20px; height: 38px; border-radius: 2px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border: none; cursor: pointer; transition: all 180ms ease; }
+  .btn-primary { background: #E8E8E8; color: #080808; }
+  .btn-primary:hover { background: #ffffff; }
+  .btn-secondary { background: transparent; color: rgba(255,255,255,0.7); border: 1px solid #2A2A2A; }
+  .btn-secondary:hover { border-color: #3D3D3D; color: #E8E8E8; }
+  .btn-accent { background: transparent; color: #C6A34F; border: 1px solid rgba(198,163,79,0.45); }
+  .btn-accent:hover { background: rgba(198,163,79,0.08); border-color: #C6A34F; }
+  .btn-danger { background: transparent; color: #E57373; border: 1px solid rgba(229,115,115,0.4); }
+  .btn-sm { height: 30px; padding: 0 14px; font-size: 10px; }
+  .btn-lg { height: 48px; padding: 0 28px; font-size: 13px; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  hr { border: none; border-top: 1px solid #1A1A1A; margin: 4px 0 10px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="label">Primary</div>
+    <button class="btn btn-primary">Schedule Call</button>
+    <button class="btn btn-primary btn-sm">Schedule Call</button>
+    <button class="btn btn-primary btn-lg">Get Started</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Secondary</div>
+    <button class="btn btn-secondary">Learn More</button>
+    <button class="btn btn-secondary btn-sm">Learn More</button>
+    <button class="btn btn-secondary" disabled>Disabled</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Gold Accent</div>
+    <button class="btn btn-accent">View Policy</button>
+    <button class="btn btn-accent btn-sm">View Policy</button>
+  </div>
+  <hr>
+  <div class="row">
+    <div class="label">Danger</div>
+    <button class="btn btn-danger">Remove Client</button>
+  </div>
+</body>
+</html>

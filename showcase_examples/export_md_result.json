@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "command": "export_markdown",
+  "dry_run": false,
+  "vault_dir": "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault",
+  "files": [
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Contacts/demo-client.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Contacts/hayden.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Contacts/alicia.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Touchpoints/2026-05-13 demo-client.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Touchpoints/2026-05-13 hayden.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Touchpoints/2026-05-13 alicia.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault/Reminders/index.md"
+  ],
+  "counts": {
+    "contacts": 3,
+    "touchpoints": 3,
+    "daily_focus": 0,
+    "reminders": 3
+  },
+  "message": "Exported 7 Markdown files to /Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/markdown_vault."
+}

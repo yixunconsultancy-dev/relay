@@ -1,0 +1,4 @@
+id,name,type,relationship_stage,phone,email,occupation,company,birthday,family,policies,financial_concerns,interests,referral_source,next_review_date,last_touch_date,notes,created_at,updated_at
+c_20260520_9c3c,Demo Client,prospect,warm,,,,,,,,,,,,2026-05-20,,2026-05-20T09:32:47,2026-05-20T10:58:59
+c_20260520_3960,Sarah Lim,prospect,warm,,,,,,,,,,,,2026-05-20,,2026-05-20T09:32:47,2026-05-20T10:58:59
+c_20260520_fc6d,Jason Wong,advisor,warming,,,,,,,,,,,,2026-05-20,,2026-05-20T09:32:47,2026-05-20T10:58:59

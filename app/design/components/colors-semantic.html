@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080808; font-family: 'Barlow', sans-serif; padding: 18px 20px; }
+  .row { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
+  .chip { height: 34px; border-radius: 2px; display: flex; align-items: center; padding: 0 14px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; font-family: 'Barlow', sans-serif; }
+  .role { font-size: 9px; color: rgba(255,255,255,0.25); letter-spacing: 0.08em; text-transform: uppercase; min-width: 80px; font-weight: 600; }
+  .hex { font-size: 9px; color: rgba(255,255,255,0.2); font-family: 'JetBrains Mono', monospace; margin-left: 6px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="role">bg-base</div>
+    <div class="chip" style="background:#050505; color:rgba(255,255,255,0.5); border:1px solid #1A1A1A;">bg-base</div>
+    <div class="hex">#050505</div>
+  </div>
+  <div class="row">
+    <div class="role">bg-surface</div>
+    <div class="chip" style="background:#111111; color:rgba(255,255,255,0.5); border:1px solid #222;">bg-surface</div>
+    <div class="hex">#111111</div>
+  </div>
+  <div class="row">
+    <div class="role">fg-primary</div>
+    <div class="chip" style="background:#E8E8E8; color:#080808;">fg-primary</div>
+    <div class="hex">#E8E8E8</div>
+  </div>
+  <div class="row">
+    <div class="role">fg-muted</div>
+    <div class="chip" style="background:rgba(255,255,255,0.38); color:#080808;">fg-muted · 38%</div>
+    <div class="hex">white 38%</div>
+  </div>
+  <div class="row">
+    <div class="role">accent</div>
+    <div class="chip" style="background:#C6A34F; color:#050505;">accent · gold</div>
+    <div class="hex">#C6A34F</div>
+  </div>
+  <div class="row">
+    <div class="role">border</div>
+    <div class="chip" style="background:transparent; color:rgba(255,255,255,0.4); border:1px solid #2A2A2A;">border-default</div>
+    <div class="hex">#2A2A2A</div>
+  </div>
+  <div class="row">
+    <div class="role">border-gold</div>
+    <div class="chip" style="background:transparent; color:#C6A34F; border:1px solid rgba(198,163,79,0.35);">border-accent</div>
+    <div class="hex">gold 35%</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "command": "appointment_summary",
+  "dry_run": false,
+  "files": [
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/appointment_dark/Generated/appointment_summary/2026-05-19 demo-client.md",
+    "/Users/luc/Documents/paperclip/deliverables/AWM/Relationship OS Kit/showcase_examples/appointment_dark/Generated/appointment_summary/2026-05-19 demo-client.pdf"
+  ],
+  "message": "Generated appointment summary for Demo Client."
+}

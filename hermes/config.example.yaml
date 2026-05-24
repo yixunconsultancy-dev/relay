@@ -1,0 +1,27 @@
+# Example Hermes config fragment for a Relationship OS profile.
+# Most users should run scripts/bootstrap_hermes_profile.sh instead of editing
+# this by hand.
+
+model:
+  default: gpt-5.5
+  provider: openai-codex
+
+toolsets:
+  - hermes-cli
+
+agent:
+  gateway_timeout: 1800
+  gateway_notify_interval: 180
+  reasoning_effort: medium
+
+gateway:
+  session_reset:
+    mode: both
+    at_hour: 4
+    idle_minutes: 1440
+    notify: true
+
+platforms:
+  telegram:
+    enabled: true
+    unauthorized_dm_behavior: pair

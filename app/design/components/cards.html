@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; padding: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* Stat card */
+  .card { border-radius: 2px; padding: 16px; background: #0E0E0E; border: 1px solid #1A1A1A; }
+  .card-label { font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(198,163,79,0.6); margin-bottom: 6px; }
+  .card-stat { font-family: 'Cormorant Garamond', serif; font-size: 36px; font-weight: 300; color: #C6A34F; line-height: 1; }
+  .card-sub { font-family: 'Barlow', sans-serif; font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 4px; }
+  /* Client card */
+  .client-card { border-radius: 2px; background: #0E0E0E; border: 1px solid #1A1A1A; overflow: hidden; }
+  .client-header { padding: 12px 14px 8px; border-bottom: 1px solid #1A1A1A; }
+  .client-name { font-family: 'Barlow', sans-serif; font-size: 13px; font-weight: 600; color: #E8E8E8; }
+  .client-role { font-family: 'Barlow Condensed', sans-serif; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(198,163,79,0.7); margin-top: 2px; }
+  .client-body { padding: 10px 14px; }
+  .client-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .client-key { font-family: 'Barlow', sans-serif; font-size: 11px; color: rgba(255,255,255,0.35); }
+  .client-val { font-family: 'Barlow', sans-serif; font-size: 11px; color: rgba(255,255,255,0.75); font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-family: 'Barlow Condensed', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .badge-gold { background: rgba(198,163,79,0.15); color: #C6A34F; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="card">
+    <div class="card-label">Total AUM</div>
+    <div class="card-stat">$4.2M</div>
+    <div class="card-sub">↑ 12.4% this quarter</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Active Clients</div>
+    <div class="card-stat">38</div>
+    <div class="card-sub">3 new this month</div>
+  </div>
+  <div class="client-card" style="grid-column: span 2;">
+    <div class="client-header">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <div class="client-name">Marcus Whitfield</div>
+          <div class="client-role">Senior Consultant</div>
+        </div>
+        <div class="badge badge-gold">Active</div>
+      </div>
+    </div>
+    <div class="client-body">
+      <div class="client-row"><span class="client-key">Policy Type</span><span class="client-val">IUL — Premium</span></div>
+      <div class="client-row"><span class="client-key">Cash Value</span><span class="client-val">$847,293</span></div>
+      <div class="client-row"><span class="client-key">Next Review</span><span class="client-val">May 14, 2026</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

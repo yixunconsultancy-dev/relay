@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080808; font-family: 'Barlow', sans-serif; padding: 20px; }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .swatch { flex: 1; min-width: 72px; border-radius: 2px; overflow: hidden; }
+  .swatch-color { height: 72px; width: 100%; }
+  .swatch-info { padding: 6px 8px; background: #111; }
+  .swatch-name { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.75); }
+  .swatch-hex  { font-size: 9px; color: rgba(255,255,255,0.3); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="swatches">
+  <div class="swatch">
+    <div class="swatch-color" style="background:#050505;"></div>
+    <div class="swatch-info"><div class="swatch-name">Black</div><div class="swatch-hex">#050505</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#0E0E0E;"></div>
+    <div class="swatch-info"><div class="swatch-name">Surface</div><div class="swatch-hex">#0E0E0E</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#1A1A1A;"></div>
+    <div class="swatch-info"><div class="swatch-name">Raised</div><div class="swatch-hex">#1A1A1A</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#2A2A2A;"></div>
+    <div class="swatch-info"><div class="swatch-name">Border</div><div class="swatch-hex">#2A2A2A</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#E8E8E8; outline: 1px solid #2A2A2A;"></div>
+    <div class="swatch-info" style="background:#111;"><div class="swatch-name">Off-White</div><div class="swatch-hex">#E8E8E8 · CTA</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#FFFFFF; outline: 1px solid #2A2A2A;"></div>
+    <div class="swatch-info" style="background:#111;"><div class="swatch-name">White</div><div class="swatch-hex">#FFFFFF</div></div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#C6A34F;"></div>
+    <div class="swatch-info"><div class="swatch-name">Gold</div><div class="swatch-hex">#C6A34F · Accent</div></div>
+  </div>
+</div>
+</body>
+</html>

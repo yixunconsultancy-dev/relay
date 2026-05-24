@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; font-family: 'Barlow', sans-serif; padding: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .swatch { border-radius: 2px; overflow: hidden; }
+  .swatch-color { height: 44px; }
+  .swatch-info { padding: 5px 7px; background: #0E0E0E; }
+  .swatch-name { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.6); }
+  .swatch-role { font-size: 8px; color: rgba(255,255,255,0.25); margin-top: 1px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="swatch"><div class="swatch-color" style="background:#050505;"></div><div class="swatch-info"><div class="swatch-name">950</div><div class="swatch-role">bg-base</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#0E0E0E;"></div><div class="swatch-info"><div class="swatch-name">900</div><div class="swatch-role">bg-surface</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#1A1A1A;"></div><div class="swatch-info"><div class="swatch-name">800</div><div class="swatch-role">bg-raised</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#2A2A2A;"></div><div class="swatch-info"><div class="swatch-name">700</div><div class="swatch-role">border</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#3D3D3D;"></div><div class="swatch-info"><div class="swatch-name">600</div><div class="swatch-role">border-strong</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#555555;"></div><div class="swatch-info"><div class="swatch-name">500</div><div class="swatch-role">fg-disabled</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#737373;"></div><div class="swatch-info"><div class="swatch-name">400</div><div class="swatch-role">fg-muted</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#9A9A9A;"></div><div class="swatch-info"><div class="swatch-name">300</div><div class="swatch-role">fg-secondary</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#C2C2C2; outline:1px solid #2A2A2A;"></div><div class="swatch-info"><div class="swatch-name">200</div><div class="swatch-role">—</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#E2E2E2; outline:1px solid #2A2A2A;"></div><div class="swatch-info"><div class="swatch-name">100</div><div class="swatch-role">fg-primary</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#F5F5F5; outline:1px solid #2A2A2A;"></div><div class="swatch-info"><div class="swatch-name">50</div><div class="swatch-role">bg-light</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#C6A34F;"></div><div class="swatch-info"><div class="swatch-name">Gold</div><div class="swatch-role">accent only</div></div></div>
+</div>
+</body>
+</html>
