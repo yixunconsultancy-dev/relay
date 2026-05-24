@@ -14,6 +14,7 @@ import {
   SENTIMENT_TONE,
 } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DailyScoreCard } from "@/components/daily-score-card";
 import { QuickLogDialog } from "@/components/quick-log-dialog";
 import {
   useAllReminders,
@@ -118,14 +119,17 @@ export function HomeRoute() {
               {needsAttention.length === 1 ? "" : "s"} need attention
             </p>
           </div>
-          <Button
-            variant="gold"
-            size="md"
-            onClick={() => setQuickOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Quick log
-          </Button>
+          <div className="flex items-end gap-3 flex-wrap">
+            <DailyScoreCard today={today} />
+            <Button
+              variant="gold"
+              size="md"
+              onClick={() => setQuickOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Quick log
+            </Button>
+          </div>
         </div>
       </header>
 
