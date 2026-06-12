@@ -46,7 +46,7 @@ export type FolderPickResult =
 
 export async function pickKitFolder(): Promise<FolderPickResult> {
   const picked = await openDialog({
-    title: "Locate your AWMOS kit folder",
+    title: "Locate your Cronos kit folder",
     directory: true,
     multiple: false,
   });

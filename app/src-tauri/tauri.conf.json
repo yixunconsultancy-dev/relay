@@ -1,19 +1,19 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AWMOS",
+  "productName": "Cronos",
   "version": "0.1.0",
   "identifier": "com.awm.relationshipos",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npx vite build",
     "beforeBundleCommand": "bash scripts/cleanup-dmg-state.sh",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "AWMOS",
+        "title": "Cronos",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -28,7 +28,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,9 +41,18 @@
     ],
     "macOS": {
       "dmg": {
-        "windowSize": { "width": 660, "height": 400 },
-        "appPosition": { "x": 180, "y": 200 },
-        "applicationFolderPosition": { "x": 480, "y": 200 }
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 200
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 200
+        }
       }
     }
   }

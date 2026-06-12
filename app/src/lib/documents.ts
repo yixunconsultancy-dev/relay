@@ -8,13 +8,15 @@ export type DocumentKind =
   | "appointment_summary"
   | "proposal"
   | "slides"
-  | "writeup";
+  | "writeup"
+  | "policy_summary";
 
 export const DOCUMENT_KINDS: DocumentKind[] = [
   "appointment_summary",
   "proposal",
   "slides",
   "writeup",
+  "policy_summary",
 ];
 
 export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
@@ -22,6 +24,7 @@ export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   proposal: "Proposal",
   slides: "Slides",
   writeup: "Writeup",
+  policy_summary: "Policy summary",
 };
 
 export interface GeneratedDocument {
@@ -44,6 +47,15 @@ export async function openDocument(path: string): Promise<void> {
 
 export async function revealDocumentInFinder(path: string): Promise<void> {
   return invoke<void>("reveal_generated_document", { path });
+}
+
+export async function deleteGeneratedDocument(path: string): Promise<void> {
+  return invoke<void>("delete_generated_document", { path });
+}
+
+/** Reveal multiple files simultaneously in Finder (macOS). */
+export async function revealFilesInFinder(paths: string[]): Promise<void> {
+  return invoke<void>("reveal_files_in_finder", { paths });
 }
 
 export function useGeneratedDocuments() {
@@ -102,4 +114,47 @@ export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ── Contact Document file operations ─────────────────────────────────────────
+
+export async function importContactDocumentFile(
+  srcPath: string,
+  contactId: string,
+  filename: string
+): Promise<string> {
+  return invoke<string>("import_contact_document", { srcPath, contactId, filename });
+}
+
+export async function deleteContactDocumentFile(path: string): Promise<void> {
+  return invoke<void>("delete_contact_document", { path });
+}
+
+export async function openContactDocumentFile(path: string): Promise<void> {
+  return invoke<void>("open_contact_document", { path });
+}
+
+export async function revealContactDocumentFile(path: string): Promise<void> {
+  return invoke<void>("reveal_contact_document", { path });
+}
+
+export async function purgeContactDocumentFolder(contactId: string): Promise<void> {
+  return invoke<void>("purge_contact_documents", { contactId });
+}
+
+/** Delete all vault/Generated/ files whose slug matches this contact.
+ *  Returns the number of files removed. */
+export async function purgeContactGeneratedDocuments(contactSlug: string): Promise<number> {
+  return invoke<number>("purge_contact_generated_documents", { contactSlug });
+}
+
+/** Derive a simple type label from a file extension. */
+export function fileTypeFromName(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf: "pdf", xlsx: "xlsx", xls: "xlsx", csv: "csv",
+    pptx: "pptx", ppt: "pptx", docx: "docx", doc: "docx",
+    png: "image", jpg: "image", jpeg: "image",
+  };
+  return map[ext] ?? ext;
 }

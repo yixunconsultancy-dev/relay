@@ -54,6 +54,7 @@ EVENTS = "Events"
 POLICIES = "Policies"
 CLARIFICATIONS = "Clarifications"
 RELATIONSHIPS = "Relationships"
+INVESTMENT_PRODUCTS = "Investment Products"
 
 # Append-only audit table. Every durable write (touchpoint logged, reminder
 # completed/snoozed/cancelled, etc.) records one row here so the consultant or
@@ -74,6 +75,10 @@ VALID_EVENT_KINDS = {
     "policy_created",
     "policy_updated",
     "policy_archived",
+    # Trash lifecycle for policies — parallel to contact trash events.
+    "policy_discarded",
+    "policy_restored",
+    "policy_purged",
     "clarification_queued",
     "clarification_resolved",
     "relationship_created",
@@ -109,6 +114,14 @@ HEADERS: Dict[str, List[str]] = {
         # but stay in the DB so the audit trail and historical touchpoints
         # are preserved.
         "archived_at",
+        # ISO timestamp when this contact was moved to trash. Empty means
+        # active. Trashed contacts are hidden from all views until permanently
+        # deleted or restored.
+        "deleted_at",
+        # JSON object of user-defined key/value pairs, e.g.
+        # {"Annual Income": "80000", "Risk Appetite": "Moderate"}.
+        # Stored as a raw JSON string; parsed by the TypeScript layer.
+        "custom_fields",
         "created_at",
         "updated_at",
     ],
@@ -190,6 +203,41 @@ HEADERS: Dict[str, List[str]] = {
         "needs_category",
         "status",
         "notes",
+        # Investment-tracking columns. Added for the Investments dashboard so a
+        # single policy row carries everything Jovial reuploads each month
+        # (total premiums paid + current fund value), plus the structural
+        # details (portfolio, lock-in, product link).
+        "portfolio",                 # Free-text custom label (used when portfolio_tag = 'custom')
+        "portfolio_tag",             # Enum: pro_adventurous / pro_balanced / … / ferrari / custom (see PORTFOLIO_TAGS)
+        "total_premiums_paid",       # Running total of premiums paid to date (updated on reupload)
+        "lock_in_period",            # Per-policy override (e.g. "60 months"); usually inherited from product
+        "lock_in_end_date",          # Explicit user-set unlock date (overrides computed start_date + lock_in_period)
+        "premium_holiday_months",    # Integer count of months the client took as a premium holiday
+        "product_id",                # FK-ish link into InvestmentProducts table
+        # Nomination toggle: "yes" / "no" / "". When "yes", `beneficiaries`
+        # holds a JSON array of {name, relationship, percentage} entries.
+        # When "no" or empty, the policy has no nominated beneficiaries.
+        "has_nomination",
+        # Trash / soft-delete. ISO timestamp when the policy was discarded
+        # from the client card. Rows with a non-empty deleted_at are hidden
+        # from the contact's policies list and surfaced on the Trash page
+        # instead (parallel to contacts.deleted_at).
+        "deleted_at",
+        "created_at",
+        "updated_at",
+    ],
+    # Investment product catalog. Each row is a *type* of product (Pro Achiever,
+    # Platinum Wealth Venture, etc.) — the fixed metadata (premium term,
+    # lock-in period) that applies to all client policies of that product.
+    # When Jovial enters a new client policy in the Investments dashboard she
+    # picks a product from this list; premium_term and lock_in_period auto-fill.
+    INVESTMENT_PRODUCTS: [
+        "id",
+        "name",
+        "premium_term",
+        "lock_in_period",
+        "notes",
+        "archived_at",
         "created_at",
         "updated_at",
     ],
@@ -247,7 +295,26 @@ DEFAULT_SETTINGS = {
     "vault_dir": "vault",
     "design_path": "design.md",
     "design_scheme": "awm-light",
+    # Date Jovial last refreshed total_premiums_paid / current_value across
+    # the Investments dashboard. Displayed top-right. Empty until first upload.
+    "investments_correct_as_of": "",
 }
+
+# Initial product catalog seeded on first run. Premium term and lock-in are
+# left blank — Yixun fills them in once via the Manage Products dialog and
+# the values propagate to every new client policy of that product thereafter.
+INITIAL_INVESTMENT_PRODUCTS = [
+    "Pro Achiever",
+    "Pro Achiever 2.0",
+    "Pro Achiever 3.0",
+    "Platinum Wealth Venture",
+    "Platinum Wealth Elite",
+    "InvestEasy",
+    "Platinum Retirement Elite",
+    "Pro Lifetime Protector",
+    "Pro Lifetime Protector 2.0",
+    "Wealth Venture",
+]
 
 VALID_SETTING_KEYS = set(DEFAULT_SETTINGS)
 VALID_DESIGN_SCHEMES = {"awm-light", "awm-dark"}
@@ -336,14 +403,11 @@ SCHEME_BRAND_DEFAULTS = {
 # `last_touch_date` on the contact, and the UI hides these by default in the
 # timeline. Everything else IS treated as a real interaction.
 VALID_TOUCHPOINT_TYPES = {
-    "meeting",
-    "call",
-    "coffee",
-    "lunch",
-    "event",
-    "message",
-    "referral",
-    "other",
+    "casual_message",
+    "non_business_meeting",
+    "business_meeting",
+    "claim_pos_request",
+    "client_event",
     "import",
 }
 
@@ -352,17 +416,15 @@ VALID_TOUCHPOINT_TYPES = {
 # attention calculator. Imports, sync, and other system-generated touchpoints
 # must NOT pollute these signals.
 REAL_INTERACTION_TOUCHPOINT_TYPES = {
-    "meeting",
-    "call",
-    "coffee",
-    "lunch",
-    "event",
-    "message",
-    "referral",
-    "other",
+    "casual_message",
+    "non_business_meeting",
+    "business_meeting",
+    "claim_pos_request",
+    "client_event",
 }
 VALID_SENTIMENTS = {"positive", "neutral", "negative", "mixed"}
-VALID_CONTACT_TYPES = {"client", "prospect", "candidate", "advisor", "other"}
+VALID_CONTACT_TYPES = {"client", "prospect", "candidate", "advisor", "other",
+                       "cold", "warming", "in_conversation"}  # Hermes pipeline types
 VALID_STAGES = {"cold", "warming", "warm", "hot", "client", "inactive"}
 VALID_PRIORITIES = {"high", "medium", "low"}
 VALID_REMINDER_TYPES = {
@@ -379,6 +441,22 @@ VALID_REMINDER_TYPES = {
 # Policy status taxonomy. "archived" is the soft-delete state — we never
 # actually delete a policy row so the audit trail survives.
 VALID_POLICY_STATUSES = {"active", "lapsed", "surrendered", "claimed", "archived"}
+
+# Portfolio tags — the underlying risk/strategy profile a policy is invested
+# in. Used in the Investments dashboard filter chips and rendered as a Badge
+# on each row. 'custom' is the catch-all for portfolios outside this list;
+# when a policy is tagged 'custom', the human-readable label goes in the
+# `portfolio` column.
+PORTFOLIO_TAGS = (
+    "pro_adventurous",
+    "pro_balanced",
+    "pro_cautious",
+    "elite_adventurous",
+    "elite_balanced",
+    "steady",
+    "ferrari",
+    "custom",
+)
 
 # Editable policy fields. `id`, `contact_id`, `created_at`, `updated_at` are
 # managed by the kit and can't be overwritten via update-policy.
@@ -409,9 +487,18 @@ EDITABLE_POLICY_FIELDS = {
     "needs_category",
     "status",
     "notes",
+    # Investment-tracking columns (Investments dashboard).
+    "portfolio",
+    "portfolio_tag",
+    "total_premiums_paid",
+    "lock_in_period",
+    "lock_in_end_date",
+    "premium_holiday_months",
+    "product_id",
+    "has_nomination",
 }
 
-POLICY_DATE_FIELDS = ("start_date", "review_date", "last_reviewed", "valuation_date")
+POLICY_DATE_FIELDS = ("start_date", "review_date", "last_reviewed", "valuation_date", "lock_in_end_date")
 
 # Fields the consultant owns and Hermes may write via `update-contact`.
 # `name` is intentionally excluded — name changes should go through a contact
@@ -430,6 +517,10 @@ CONSULTANT_MANAGED_FIELDS = {
     "referral_source",
     "next_review_date",
     "notes",
+    # These were originally Hermes-only, but the consultant can override them
+    # directly in the app (e.g. promoting a prospect → client, updating stage).
+    "type",
+    "relationship_stage",
 }
 
 # Fields Hermes must never overwrite — they're derived from touchpoints or
@@ -437,8 +528,6 @@ CONSULTANT_MANAGED_FIELDS = {
 HERMES_MANAGED_FIELDS = {
     "id",
     "name",
-    "type",
-    "relationship_stage",
     "last_touch_date",
     "created_at",
     "updated_at",
@@ -660,6 +749,72 @@ class SQLiteStore(Store):
                         f'INSERT INTO "{settings_table}" ("key", "value") VALUES (?, ?)',
                         (key, value),
                     )
+            else:
+                # Top up any DEFAULT_SETTINGS keys that the existing settings
+                # table is missing (e.g. on upgrade we added a new key). This
+                # keeps newer features working on older databases.
+                existing_keys = {
+                    row["key"]
+                    for row in conn.execute(f'SELECT "key" FROM "{settings_table}"').fetchall()
+                }
+                for key, value in DEFAULT_SETTINGS.items():
+                    if key not in existing_keys:
+                        conn.execute(
+                            f'INSERT INTO "{settings_table}" ("key", "value") VALUES (?, ?)',
+                            (key, value),
+                        )
+
+            # Seed the investment-product catalog. Matches by case-insensitive
+            # name so the seeding is idempotent (running ensure() repeatedly
+            # never duplicates products). Premium term and lock-in are left
+            # blank — Yixun fills them in once via the UI.
+            products_table = sqlite_table_name(INVESTMENT_PRODUCTS)
+            existing_names = {
+                str(row["name"] or "").strip().lower()
+                for row in conn.execute(f'SELECT "name" FROM "{products_table}"').fetchall()
+            }
+            ts = now_iso()
+            for product_name in INITIAL_INVESTMENT_PRODUCTS:
+                if product_name.strip().lower() in existing_names:
+                    continue
+                product_id = make_id("ip")
+                conn.execute(
+                    f'INSERT INTO "{products_table}" '
+                    f'("id", "name", "premium_term", "lock_in_period", "notes", '
+                    f'"archived_at", "created_at", "updated_at") '
+                    f'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    (product_id, product_name, "", "", "", "", ts, ts),
+                )
+
+            # ── One-time data migrations (versioned via settings flags) ───
+            # Migration: clear investment-specific fields on every existing
+            # policy so the new contact-first flow starts from a clean slate.
+            # The user's decision (2026-05-26 session) — they're restructuring
+            # the data entry path and want any earlier experimental values
+            # blown away. Runs exactly once; the flag prevents re-runs.
+            flag_row = conn.execute(
+                f'SELECT "value" FROM "{settings_table}" WHERE "key" = ?',
+                ("investment_fields_reset_v1",),
+            ).fetchone()
+            if not flag_row or not (flag_row["value"] or "").strip():
+                policies_table = sqlite_table_name(POLICIES)
+                conn.execute(
+                    f'UPDATE "{policies_table}" SET '
+                    f'"portfolio" = "", '
+                    f'"portfolio_tag" = "", '
+                    f'"total_premiums_paid" = "", '
+                    f'"current_value" = "", '
+                    f'"valuation_date" = "", '
+                    f'"premium_holiday_months" = "", '
+                    f'"lock_in_end_date" = ""'
+                )
+                # No ON CONFLICT here — the settings table has no UNIQUE
+                # constraint on key. The flag_row check above already
+                # established that this row doesn't exist yet.
+                conn.execute(
+                    f'INSERT INTO "{settings_table}" ("key", "value") VALUES (?, ?)',
+                    ("investment_fields_reset_v1", "1"),
+                )
 
     def read(self, tab: str) -> List[Dict[str, str]]:
         table = sqlite_table_name(tab)
@@ -1749,7 +1904,8 @@ def find_duplicate_reminder(
 def find_contact(store: Store, name: str) -> Optional[Dict[str, str]]:
     wanted = name.casefold()
     for row in store.read(CONTACTS):
-        if row.get("name", "").casefold() == wanted:
+        if (row.get("name", "").casefold() == wanted
+                and not (row.get("deleted_at") or "").strip()):
             return row
     return None
 
@@ -1757,6 +1913,15 @@ def find_contact(store: Store, name: str) -> Optional[Dict[str, str]]:
 def find_contact_by_id(store: Store, contact_id: str) -> Optional[Dict[str, str]]:
     for row in store.read(CONTACTS):
         if row.get("id") == contact_id:
+            return row
+    return None
+
+
+def find_contact_by_id_or_name_raw(store: Store, name: str) -> Optional[Dict[str, str]]:
+    """Like find_contact but includes deleted/trashed contacts. Used by restore/purge."""
+    wanted = name.casefold()
+    for row in store.read(CONTACTS):
+        if row.get("name", "").casefold() == wanted:
             return row
     return None
 
@@ -1887,6 +2052,90 @@ def read_events(
                 continue
         out.append(row)
     return out
+
+
+def cmd_create_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Create a new contact record directly (no touchpoint required)."""
+    store = get_store()
+    store.ensure()
+
+    name = str(getattr(args, "name", "") or "").strip()
+    if not name:
+        raise RelationshipOSError("create-contact requires --name.")
+
+    # Validate type and stage if provided
+    contact_type = str(getattr(args, "contact_type", "") or "prospect").strip().lower()
+    if contact_type not in VALID_CONTACT_TYPES:
+        raise RelationshipOSError(
+            f"contact_type must be one of {sorted(VALID_CONTACT_TYPES)}; got {contact_type!r}."
+        )
+    relationship_stage = str(getattr(args, "relationship_stage", "") or "warming").strip().lower()
+    if relationship_stage not in VALID_STAGES:
+        raise RelationshipOSError(
+            f"relationship_stage must be one of {sorted(VALID_STAGES)}; got {relationship_stage!r}."
+        )
+
+    # Check for duplicate names. We ignore contacts that are archived OR in
+    # Trash (deleted_at set) — those are not considered "live" rows, so the
+    # user should be free to create a new contact with the same name.
+    # Without this, a soft-deleted contact would block re-using the name
+    # until the user permanently empties Trash.
+    existing = store.read(CONTACTS)
+    for row in existing:
+        if (row.get("name") or "").strip().lower() != name.lower():
+            continue
+        if (row.get("archived_at") or "").strip():
+            continue
+        if (row.get("deleted_at") or "").strip():
+            continue
+        raise RelationshipOSError(
+            f"A contact named {name!r} already exists (id={row.get('id')}). "
+            "Use a different name or add a distinguishing detail."
+        )
+
+    contact_id = make_id("c")
+    now = now_iso()
+    new_contact: Dict[str, str] = {
+        "id": contact_id,
+        "name": name,
+        "type": contact_type,
+        "relationship_stage": relationship_stage,
+        "phone": str(getattr(args, "phone", "") or "").strip(),
+        "email": str(getattr(args, "email", "") or "").strip(),
+        "occupation": str(getattr(args, "occupation", "") or "").strip(),
+        "company": str(getattr(args, "company", "") or "").strip(),
+        "address": "",
+        "birthday": "",
+        "family": "",
+        "policies": "",
+        "financial_concerns": "",
+        "interests": "",
+        "referral_source": "",
+        "next_review_date": "",
+        "notes": "",
+        "last_touch_date": "",
+        "archived_at": "",
+        "custom_fields": "{}",
+        "created_at": now,
+        "updated_at": now,
+    }
+    existing.append(new_contact)
+    store.replace(CONTACTS, existing)
+    log_event(
+        store,
+        "contact_created",
+        contact_id=contact_id,
+        subject_id=contact_id,
+        payload={"name": name, "type": contact_type},
+        source="app:create-contact",
+    )
+    sync_consultant_views(store)
+    return {
+        "ok": True,
+        "command": "create-contact",
+        "contact": {"id": contact_id, "name": name, "type": contact_type},
+        "message": f"Created contact {name!r} ({contact_id}).",
+    }
 
 
 def cmd_init(args: argparse.Namespace) -> Dict[str, object]:
@@ -3133,6 +3382,213 @@ def cmd_prep(args: argparse.Namespace) -> Dict[str, object]:
     }
 
 
+# ─── Send client brief to Telegram ───────────────────────────────────────────
+
+
+def _render_client_telegram_brief(
+    contact: Dict[str, str],
+    touches: List[Dict[str, str]],
+    reminders: List[Dict[str, str]],
+    policies: List[Dict[str, str]],
+) -> str:
+    """Concise 10-15 line pre-meeting brief. Plain text (no Markdown), so
+    Telegram renders it the same on all clients.
+    """
+    name = contact.get("name") or "Unnamed contact"
+    type_ = (contact.get("type") or "").strip()
+    stage = (contact.get("relationship_stage") or "").strip()
+    type_line = " · ".join([s for s in (type_, stage) if s]) or "—"
+
+    occ = (contact.get("occupation") or "").strip()
+    co = (contact.get("company") or "").strip()
+    occ_line = " @ ".join([s for s in (occ, co) if s])
+    bday = (contact.get("birthday") or "").strip()
+    family = (contact.get("family") or "").strip()
+    concerns = (contact.get("financial_concerns") or "").strip()
+    interests = (contact.get("interests") or "").strip()
+    notes = (contact.get("notes") or "").strip()
+
+    lines: List[str] = [
+        f"📋 {name}",
+        f"   {type_line}",
+    ]
+    if occ_line:
+        lines.append(f"   {occ_line}")
+    if bday:
+        lines.append(f"   🎂 {bday}")
+    lines.append("")
+
+    last = touches[0] if touches else None
+    if last:
+        date = last.get("date") or ""
+        summary = (last.get("summary") or "").strip()
+        topics = (last.get("topics") or "").strip()
+        ltype = (last.get("type") or "").strip()
+        bits = " · ".join([s for s in (date, ltype) if s])
+        lines.append(f"Last touch: {bits or '—'}")
+        if summary:
+            # Truncate long summaries to keep brief tight.
+            short = summary if len(summary) <= 240 else summary[:237] + "…"
+            lines.append(f"  ↳ {short}")
+        if topics:
+            lines.append(f"  topics: {topics}")
+        lines.append("")
+
+    if family:
+        lines.append(f"Family: {family}")
+    if concerns:
+        lines.append(f"Concerns: {concerns}")
+    if interests:
+        lines.append(f"Interests: {interests}")
+    if family or concerns or interests:
+        lines.append("")
+
+    if reminders:
+        lines.append(f"Pending reminders ({len(reminders)}):")
+        for r in reminders[:5]:
+            prio = (r.get("priority") or "med").upper()
+            due = (r.get("due_date") or "").strip()
+            ctx = (r.get("context") or "(no context)").strip()
+            lines.append(f"  • [{prio}] {due} — {ctx}")
+        if len(reminders) > 5:
+            lines.append(f"  …and {len(reminders) - 5} more")
+        lines.append("")
+
+    if policies:
+        lines.append(f"Policies in force ({len(policies)}):")
+        for p in policies[:5]:
+            insurer = (p.get("insurer") or "").strip()
+            plan = (p.get("plan_name") or "").strip()
+            prem = (p.get("premium_amount") or "").strip()
+            freq = (p.get("premium_frequency") or "").strip()
+            bits = " ".join([s for s in (insurer, plan) if s]) or "—"
+            premium_bit = f"  (${prem} {freq})" if prem else ""
+            lines.append(f"  • {bits}{premium_bit}")
+        if len(policies) > 5:
+            lines.append(f"  …and {len(policies) - 5} more")
+        lines.append("")
+
+    if notes:
+        short_notes = notes if len(notes) <= 280 else notes[:277] + "…"
+        lines.append(f"Notes: {short_notes}")
+
+    # Trim trailing blank lines.
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _send_telegram_message(token: str, chat_id: str, text: str) -> Dict[str, object]:
+    """POST to Telegram's sendMessage endpoint using stdlib only.
+
+    Returns the parsed JSON response. Raises RelationshipOSError on network or
+    API errors so the caller can surface a friendly message.
+    """
+    import urllib.request
+    import urllib.parse
+    import urllib.error
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    data = urllib.parse.urlencode({
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": "true",
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8")
+        except Exception:
+            pass
+        raise RelationshipOSError(
+            f"Telegram API returned HTTP {e.code}. Response: {body}"
+        )
+    except urllib.error.URLError as e:
+        raise RelationshipOSError(
+            f"Could not reach Telegram (network error): {e.reason}"
+        )
+    except Exception as e:
+        raise RelationshipOSError(f"Unexpected error talking to Telegram: {e}")
+
+    if not payload.get("ok"):
+        raise RelationshipOSError(
+            f"Telegram rejected the message: {payload.get('description') or payload}"
+        )
+    return payload
+
+
+def cmd_send_client_brief(args: argparse.Namespace) -> Dict[str, object]:
+    """Build a pre-meeting brief for a contact and send it to Telegram.
+
+    Reads TELEGRAM_BOT_TOKEN and AUTHORIZED_USER_ID from the environment.
+    Returns a JSON payload with a clear status code so the calling UI can
+    surface a setup prompt when the bot isn't configured yet.
+    """
+    store = get_store()
+    store.ensure()
+
+    contact_id = (getattr(args, "contact_id", "") or "").strip()
+    contact_name = (getattr(args, "name", "") or "").strip()
+    if contact_id:
+        contact = find_contact_by_id(store, contact_id)
+    elif contact_name:
+        contact = find_contact(store, contact_name)
+    else:
+        raise RelationshipOSError("send-client-brief requires --id or --name.")
+    if not contact:
+        raise RelationshipOSError("Contact not found.")
+    contact_id = contact.get("id") or ""
+
+    # Gather context for the brief.
+    touches = [
+        t for t in store.read(TOUCHPOINTS) if t.get("contact_id") == contact_id
+    ]
+    touches.sort(key=lambda row: row.get("date", ""), reverse=True)
+    reminders = [
+        r for r in store.read(REMINDERS)
+        if r.get("contact_id") == contact_id and r.get("status") == "pending"
+    ]
+    reminders.sort(key=lambda row: row.get("due_date") or "")
+    policies = policies_for_contact(store, contact_id, include_archived=False)
+
+    text = _render_client_telegram_brief(contact, touches, reminders, policies)
+
+    # Look up Telegram credentials.
+    token   = (os.environ.get("TELEGRAM_BOT_TOKEN")   or "").strip()
+    chat_id = (os.environ.get("AUTHORIZED_USER_ID")   or "").strip()
+    if not token or not chat_id:
+        # Don't raise — return a structured error so the UI can show a
+        # tailored setup prompt instead of a generic failure.
+        return {
+            "ok": False,
+            "code": "telegram_not_configured",
+            "message": (
+                "Telegram bot is not configured. Set TELEGRAM_BOT_TOKEN and "
+                "AUTHORIZED_USER_ID in your .env file."
+            ),
+            "missing": [
+                k for k, v in (
+                    ("TELEGRAM_BOT_TOKEN", token),
+                    ("AUTHORIZED_USER_ID", chat_id),
+                ) if not v
+            ],
+            "preview": text,
+        }
+
+    _send_telegram_message(token, chat_id, text)
+    return {
+        "ok": True,
+        "command": "send-client-brief",
+        "contact_id": contact_id,
+        "contact_name": contact.get("name") or "",
+        "message": f"Sent brief for {contact.get('name')} to Telegram.",
+    }
+
+
 def indexed_contacts(store: Store) -> Dict[str, Dict[str, str]]:
     return {row.get("id", ""): row for row in store.read(CONTACTS) if row.get("id")}
 
@@ -3644,6 +4100,103 @@ def cmd_proposal(args: argparse.Namespace) -> Dict[str, object]:
         "dry_run": args.dry_run,
         "files": [str(paths["md"]), str(paths["pdf"])],
         "message": f"{'Would generate' if args.dry_run else 'Generated'} proposal draft for {contact.get('name')}.",
+    }
+
+
+def render_policy_summary(contact: Dict[str, str], policies: list) -> str:
+    name = contact.get("name", "Client")
+    lines = [
+        f"# Policy Summary: {name}",
+        "",
+        DRAFT_NOTICE,
+        "",
+        "## Client Snapshot",
+        f"- Type: {contact.get('type') or 'not logged'}",
+        f"- Stage: {contact.get('relationship_stage') or 'not logged'}",
+        f"- Phone: {contact.get('phone') or 'not logged'}",
+        f"- Email: {contact.get('email') or 'not logged'}",
+        f"- Occupation: {contact.get('occupation') or 'not logged'}",
+        "",
+        "## Policies in Force",
+        "",
+    ]
+    active = [p for p in policies if (p.get("status") or "active") not in ("archived",)]
+    if not active:
+        lines.append("_No active policies on record._")
+    else:
+        for i, p in enumerate(active, 1):
+            plan = p.get("plan_name") or "Unnamed plan"
+            insurer = p.get("insurer") or "—"
+            pol_type = p.get("policy_type") or "—"
+            status = p.get("status") or "active"
+            prem_amt = p.get("premium_amount") or "—"
+            prem_freq = p.get("premium_frequency") or "—"
+            prem_term = p.get("premium_term") or "—"
+            pol_term = p.get("policy_term") or "—"
+            sum_assured = p.get("sum_assured") or "—"
+            current_value = p.get("current_value") or "—"
+            surrender = p.get("surrender_value") or "—"
+            start = p.get("start_date") or "—"
+            review = p.get("review_date") or "—"
+            need = p.get("need_category") or "—"
+            payment = p.get("payment_method") or "—"
+            owner = p.get("policy_owner") or name
+            life = p.get("life_assured") or name
+            payor = p.get("payor") or owner
+            pol_num = p.get("policy_number") or "—"
+            lines += [
+                f"### {i}. {plan} ({insurer})",
+                f"- **Policy number:** {pol_num}",
+                f"- **Type:** {pol_type}  |  **Need:** {need}  |  **Status:** {status}",
+                f"- **Premium:** {prem_amt} {prem_freq}  |  **Premium term:** {prem_term}  |  **Policy term:** {pol_term}",
+                f"- **Payment method:** {payment}",
+                f"- **Sum assured:** {sum_assured}",
+                f"- **Current value:** {current_value}  |  **Surrender value:** {surrender}",
+                f"- **Start date:** {start}  |  **Review date:** {review}",
+                f"- **Policy owner:** {owner}  |  **Life assured:** {life}  |  **Payor:** {payor}",
+                "",
+            ]
+    # Totals block
+    def _num(v: str) -> float:
+        try:
+            return float(str(v).replace(",", "").replace("$", "").replace("S", "").strip())
+        except (ValueError, AttributeError):
+            return 0.0
+
+    total_sum_assured = sum(_num(p.get("sum_assured", "0")) for p in active)
+    total_current = sum(_num(p.get("current_value", "0")) for p in active)
+    lines += [
+        "## Portfolio Totals",
+        f"- **Total policies in force:** {len(active)}",
+        f"- **Total sum assured:** S${total_sum_assured:,.2f}" if total_sum_assured else "- **Total sum assured:** —",
+        f"- **Total current value:** S${total_current:,.2f}" if total_current else "- **Total current value:** —",
+        "",
+        "---",
+        BRAND_FOOTER_ATTRIBUTION,
+    ]
+    return "\n".join(lines)
+
+
+def cmd_policy_summary(args: argparse.Namespace) -> Dict[str, object]:
+    store = get_store()
+    store.ensure()
+    contact, _ = contact_from_args(store, args.name, [])
+    policies = policies_for_contact(store, contact["id"], include_archived=False)
+    markdown = render_policy_summary(contact, policies)
+    output_date = today_in_settings(store)
+    vault_dir = configured_vault_dir(store, getattr(args, "output_dir", None))
+    paths = generated_paths(vault_dir, "policy_summary", contact.get("name", "contact"), ["md", "pdf"], output_date)
+    tokens_design = load_design_tokens(configured_design_path(store), configured_design_scheme(store))
+    write_markdown(paths["md"], markdown, dry_run=args.dry_run)
+    write_basic_pdf(paths["pdf"], f"Policy Summary: {contact.get('name')}", markdown, tokens_design, dry_run=args.dry_run)
+    return {
+        "ok": True,
+        "command": "policy_summary",
+        "dry_run": args.dry_run,
+        "pdf_path": str(paths["pdf"]),
+        "md_path": str(paths["md"]),
+        "files": [str(paths["md"]), str(paths["pdf"])],
+        "message": f"{'Would generate' if args.dry_run else 'Generated'} policy summary for {contact.get('name')}.",
     }
 
 
@@ -4570,6 +5123,23 @@ def _load_policy_payload(args: argparse.Namespace) -> Optional[Dict[str, object]
     return None
 
 
+def _resolve_product_id_from_plan_name(store: Store, plan_name: str) -> str:
+    """Look up an investment product by name (case-insensitive). Returns the
+    product's id or '' if no match. Used by add/update policy so a policy
+    whose plan_name matches a catalog entry automatically appears on the
+    Investments dashboard — no separate 'is this an investment?' flag needed.
+    """
+    target = (plan_name or "").strip().lower()
+    if not target:
+        return ""
+    for p in store.read(INVESTMENT_PRODUCTS):
+        if (p.get("archived_at") or "").strip():
+            continue
+        if (p.get("name") or "").strip().lower() == target:
+            return p.get("id") or ""
+    return ""
+
+
 def cmd_add_policy(args: argparse.Namespace) -> Dict[str, object]:
     """Create a structured policy entry for a contact."""
     store = get_store()
@@ -4595,8 +5165,9 @@ def cmd_add_policy(args: argparse.Namespace) -> Dict[str, object]:
     contact = _resolve_contact_for_policy(store, contact_id, contact_name)
     contact_id = contact["id"]
 
-    if not fields.get("insurer"):
-        raise RelationshipOSError("insurer is required.")
+    # Plan name is the hard requirement; insurer is optional. Investment
+    # products are commonly identified by plan name alone (e.g. "Pro Achiever
+    # 2.0"), and the auto-resolve-product-id step uses plan_name as the key.
     if not fields.get("plan_name"):
         raise RelationshipOSError("plan_name is required.")
 
@@ -4642,6 +5213,21 @@ def cmd_add_policy(args: argparse.Namespace) -> Dict[str, object]:
         "needs_category": fields.get("needs_category", ""),
         "status": status,
         "notes": fields.get("notes", ""),
+        "portfolio": fields.get("portfolio", ""),
+        "portfolio_tag": fields.get("portfolio_tag", ""),
+        "total_premiums_paid": fields.get("total_premiums_paid", ""),
+        "lock_in_period": fields.get("lock_in_period", ""),
+        "lock_in_end_date": fields.get("lock_in_end_date", ""),
+        "premium_holiday_months": fields.get("premium_holiday_months", ""),
+        "has_nomination": fields.get("has_nomination", ""),
+        # Auto-link to the investment product catalog when the plan name
+        # matches. This is what causes a newly-added policy to show up on
+        # the Investments dashboard — the dashboard filters by "has a
+        # matching product". Falls through to whatever the caller passed
+        # (so manual product_id wiring still works).
+        "product_id": fields.get("product_id") or _resolve_product_id_from_plan_name(
+            store, fields.get("plan_name", "")
+        ),
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
@@ -4715,6 +5301,16 @@ def cmd_update_policy(args: argparse.Namespace) -> Dict[str, object]:
             continue
         target[field_name] = new_value
         diff[field_name] = {"from": old, "to": new_value}
+
+    # If the plan name changed and no explicit product_id override was sent,
+    # re-resolve product_id against the catalog. Catches the case where the
+    # consultant renames a policy to / from an investment plan.
+    if "plan_name" in diff and "product_id" not in updates:
+        resolved_product = _resolve_product_id_from_plan_name(store, target.get("plan_name", ""))
+        old_pid = target.get("product_id") or ""
+        if resolved_product != old_pid:
+            target["product_id"] = resolved_product
+            diff["product_id"] = {"from": old_pid, "to": resolved_product}
 
     if not diff:
         return {
@@ -4803,6 +5399,303 @@ def cmd_archive_policy(args: argparse.Namespace) -> Dict[str, object]:
         "previous_status": previous_status,
         "synced_views": synced,
         "message": f"Archived policy {policy_id}.",
+    }
+
+
+def cmd_discard_policy(args: argparse.Namespace) -> Dict[str, object]:
+    """Move a policy to Trash by setting deleted_at.
+
+    Parallel to cmd_trash_contact: the policy stays in the table (so it can
+    be restored later) but is filtered out of the client card and dashboard
+    queries. The Trash page surfaces it in its Policies section.
+    """
+    store = get_store()
+    store.ensure()
+    policy_id = (args.policy_id or "").strip()
+    if not policy_id:
+        raise RelationshipOSError("discard-policy requires --id.")
+    rows = store.read(POLICIES)
+    target = next((r for r in rows if r.get("id") == policy_id), None)
+    if target is None:
+        raise RelationshipOSError(f"No policy with id {policy_id!r}.")
+    if (target.get("deleted_at") or "").strip():
+        # Idempotent — already in Trash. Surface as ok so a double-click
+        # doesn't error.
+        return {
+            "ok": True,
+            "command": "discard-policy",
+            "policy_id": policy_id,
+            "already_trashed": True,
+            "message": "Policy was already in Trash.",
+        }
+    timestamp = now_iso()
+    target["deleted_at"] = timestamp
+    target["updated_at"] = timestamp
+    store.replace(POLICIES, rows)
+    log_event(
+        store,
+        "policy_discarded",
+        contact_id=target.get("contact_id") or "",
+        subject_id=policy_id,
+        payload={"deleted_at": timestamp},
+        source="discard-policy",
+    )
+    return {
+        "ok": True,
+        "command": "discard-policy",
+        "policy_id": policy_id,
+        "deleted_at": timestamp,
+        "message": f"Moved policy {policy_id} to Trash.",
+    }
+
+
+def cmd_restore_policy(args: argparse.Namespace) -> Dict[str, object]:
+    """Restore a trashed policy: clears deleted_at so it reappears on the card."""
+    store = get_store()
+    store.ensure()
+    policy_id = (args.policy_id or "").strip()
+    if not policy_id:
+        raise RelationshipOSError("restore-policy requires --id.")
+    rows = store.read(POLICIES)
+    target = next((r for r in rows if r.get("id") == policy_id), None)
+    if target is None:
+        raise RelationshipOSError(f"No policy with id {policy_id!r}.")
+    if not (target.get("deleted_at") or "").strip():
+        return {
+            "ok": True,
+            "command": "restore-policy",
+            "policy_id": policy_id,
+            "already_active": True,
+            "message": "Policy was not in Trash.",
+        }
+    target["deleted_at"] = ""
+    target["updated_at"] = now_iso()
+    store.replace(POLICIES, rows)
+    log_event(
+        store,
+        "policy_restored",
+        contact_id=target.get("contact_id") or "",
+        subject_id=policy_id,
+        payload={},
+        source="restore-policy",
+    )
+    return {
+        "ok": True,
+        "command": "restore-policy",
+        "policy_id": policy_id,
+        "message": f"Restored policy {policy_id}.",
+    }
+
+
+def cmd_purge_policy(args: argparse.Namespace) -> Dict[str, object]:
+    """Permanently delete a policy row. Only intended to be called from the
+    Trash page's 'Delete forever' action — the UI guards this with a
+    confirmation. Policies have no on-disk attachments (uploaded docs are
+    keyed to the contact, not the policy), so this is a pure row delete.
+    """
+    store = get_store()
+    store.ensure()
+    policy_id = (args.policy_id or "").strip()
+    if not policy_id:
+        raise RelationshipOSError("purge-policy requires --id.")
+    rows = store.read(POLICIES)
+    target = next((r for r in rows if r.get("id") == policy_id), None)
+    if target is None:
+        raise RelationshipOSError(f"No policy with id {policy_id!r}.")
+    contact_id_for_log = target.get("contact_id") or ""
+    new_rows = [r for r in rows if r.get("id") != policy_id]
+    store.replace(POLICIES, new_rows)
+    log_event(
+        store,
+        "policy_purged",
+        contact_id=contact_id_for_log,
+        subject_id=policy_id,
+        payload={"plan_name": target.get("plan_name") or ""},
+        source="purge-policy",
+    )
+    return {
+        "ok": True,
+        "command": "purge-policy",
+        "policy_id": policy_id,
+        "message": f"Permanently deleted policy {policy_id}.",
+    }
+
+
+# ─── Investment product catalog ──────────────────────────────────────────────
+# Products are the *type* of policy (Pro Achiever, Platinum Wealth Venture …).
+# When Jovial adds a new client policy in the Investments dashboard, she picks
+# a product; the policy inherits premium_term and lock_in_period from it.
+
+EDITABLE_PRODUCT_FIELDS = {"name", "premium_term", "lock_in_period", "notes"}
+
+
+def cmd_list_products(args: argparse.Namespace) -> Dict[str, object]:
+    """List investment products. By default returns active (non-archived) only."""
+    store = get_store()
+    store.ensure()
+    include_archived = bool(getattr(args, "include_archived", False))
+    rows = store.read(INVESTMENT_PRODUCTS)
+    if not include_archived:
+        rows = [r for r in rows if not (r.get("archived_at") or "").strip()]
+    return {
+        "ok": True,
+        "command": "list-products",
+        "count": len(rows),
+        "products": rows,
+    }
+
+
+def _load_product_payload(args: argparse.Namespace) -> Optional[Dict[str, object]]:
+    if getattr(args, "json_file", None):
+        return json.loads(Path(args.json_file).expanduser().read_text(encoding="utf-8"))
+    if getattr(args, "json", None) is not None:
+        json_text = sys.stdin.read() if args.json == "-" else args.json
+        return json.loads(json_text)
+    return None
+
+
+def cmd_add_product(args: argparse.Namespace) -> Dict[str, object]:
+    """Add a new investment product to the catalog."""
+    store = get_store()
+    store.ensure()
+
+    payload = _load_product_payload(args)
+    if payload is not None:
+        if not isinstance(payload, dict):
+            raise RelationshipOSError("add-product payload must be a JSON object.")
+        fields = {k: ("" if v is None else str(v)) for k, v in payload.items()
+                  if k in EDITABLE_PRODUCT_FIELDS}
+    else:
+        fields = {}
+        for fname in EDITABLE_PRODUCT_FIELDS:
+            value = getattr(args, fname, None)
+            if value is not None:
+                fields[fname] = str(value)
+
+    name = (fields.get("name") or "").strip()
+    if not name:
+        raise RelationshipOSError("name is required.")
+
+    # Reject duplicates (case-insensitive). The seed pass already handles this
+    # for INITIAL_INVESTMENT_PRODUCTS; this catches user-added duplicates too.
+    existing = store.read(INVESTMENT_PRODUCTS)
+    if any(name.lower() == (r.get("name") or "").strip().lower() for r in existing):
+        raise RelationshipOSError(f"A product named {name!r} already exists.")
+
+    product_id = make_id("ip")
+    ts = now_iso()
+    row = {
+        "id": product_id,
+        "name": name,
+        "premium_term": fields.get("premium_term", ""),
+        "lock_in_period": fields.get("lock_in_period", ""),
+        "notes": fields.get("notes", ""),
+        "archived_at": "",
+        "created_at": ts,
+        "updated_at": ts,
+    }
+    store.append(INVESTMENT_PRODUCTS, row)
+    return {
+        "ok": True,
+        "command": "add-product",
+        "product": row,
+        "message": f"Added product {name!r}.",
+    }
+
+
+def cmd_update_product(args: argparse.Namespace) -> Dict[str, object]:
+    """Update fields on an existing investment product (by id)."""
+    store = get_store()
+    store.ensure()
+
+    payload = _load_product_payload(args)
+    if payload is not None:
+        if not isinstance(payload, dict):
+            raise RelationshipOSError("update-product payload must be a JSON object.")
+        product_id = str(payload.get("id") or args.product_id or "").strip()
+        updates = {k: ("" if v is None else str(v)) for k, v in payload.items()
+                   if k in EDITABLE_PRODUCT_FIELDS}
+    else:
+        product_id = (args.product_id or "").strip()
+        updates = {}
+        for fname in EDITABLE_PRODUCT_FIELDS:
+            value = getattr(args, fname, None)
+            if value is not None:
+                updates[fname] = str(value)
+
+    if not product_id:
+        raise RelationshipOSError("update-product requires --id (or 'id' in JSON payload).")
+    if not updates:
+        raise RelationshipOSError("update-product requires at least one field to update.")
+
+    rows = store.read(INVESTMENT_PRODUCTS)
+    target = next((r for r in rows if r.get("id") == product_id), None)
+    if target is None:
+        raise RelationshipOSError(f"No product with id {product_id!r}.")
+
+    # If the name is being changed, enforce case-insensitive uniqueness.
+    if "name" in updates:
+        new_name = updates["name"].strip()
+        if not new_name:
+            raise RelationshipOSError("name cannot be blank.")
+        for r in rows:
+            if r.get("id") == product_id:
+                continue
+            if new_name.lower() == (r.get("name") or "").strip().lower():
+                raise RelationshipOSError(f"A product named {new_name!r} already exists.")
+        updates["name"] = new_name
+
+    diff = {}
+    for key, value in updates.items():
+        if (target.get(key) or "") != value:
+            target[key] = value
+            diff[key] = value
+    if not diff:
+        return {
+            "ok": True,
+            "command": "update-product",
+            "product_id": product_id,
+            "message": "No changes (all provided fields matched current values).",
+        }
+    target["updated_at"] = now_iso()
+    store.replace(INVESTMENT_PRODUCTS, rows)
+    return {
+        "ok": True,
+        "command": "update-product",
+        "product_id": product_id,
+        "updated_fields": list(diff.keys()),
+        "product": target,
+        "message": f"Updated {len(diff)} field(s) on product {product_id}.",
+    }
+
+
+def cmd_archive_product(args: argparse.Namespace) -> Dict[str, object]:
+    """Soft-delete a product by setting archived_at. Existing policies are unaffected."""
+    store = get_store()
+    store.ensure()
+    product_id = (args.product_id or "").strip()
+    if not product_id:
+        raise RelationshipOSError("archive-product requires --id.")
+    rows = store.read(INVESTMENT_PRODUCTS)
+    target = next((r for r in rows if r.get("id") == product_id), None)
+    if target is None:
+        raise RelationshipOSError(f"No product with id {product_id!r}.")
+    if (target.get("archived_at") or "").strip():
+        return {
+            "ok": True,
+            "command": "archive-product",
+            "product_id": product_id,
+            "message": "Product was already archived.",
+        }
+    ts = now_iso()
+    target["archived_at"] = ts
+    target["updated_at"] = ts
+    store.replace(INVESTMENT_PRODUCTS, rows)
+    return {
+        "ok": True,
+        "command": "archive-product",
+        "product_id": product_id,
+        "message": f"Archived product {product_id}.",
     }
 
 
@@ -4913,6 +5806,1589 @@ def cmd_unarchive_contact(args: argparse.Namespace) -> Dict[str, object]:
         "contact_name": target.get("name") or "",
         "synced_views": synced,
         "message": f"Unarchived {target.get('name')}.",
+    }
+
+
+def cmd_delete_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Soft-delete (trash) a contact: sets deleted_at so it moves to the Trash page."""
+    store = get_store()
+    store.ensure()
+    contact_id = (args.contact_id or "").strip()
+    contact_name_arg = (args.name or "").strip()
+    if contact_id:
+        contact = find_contact_by_id(store, contact_id)
+    elif contact_name_arg:
+        contact = find_contact_by_id_or_name_raw(store, contact_name_arg)
+        if contact:
+            contact_id = contact["id"]
+    else:
+        raise RelationshipOSError("delete-contact requires --id or --name.")
+    if not contact:
+        raise RelationshipOSError("Contact not found.")
+
+    contact_name = contact.get("name") or contact_id
+    timestamp = now_iso()
+    rows = store.read(CONTACTS)
+    for row in rows:
+        if row.get("id") == contact_id:
+            row["deleted_at"] = timestamp
+            row["updated_at"] = timestamp
+            break
+    store.replace(CONTACTS, rows)
+    return {
+        "ok": True,
+        "command": "delete-contact",
+        "contact_id": contact_id,
+        "contact_name": contact_name,
+        "deleted_at": timestamp,
+        "message": f"Moved {contact_name!r} to trash.",
+    }
+
+
+def cmd_restore_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Restore a trashed contact: clears deleted_at so it reappears in the normal list."""
+    store = get_store()
+    store.ensure()
+    contact_id = (args.contact_id or "").strip()
+    contact_name_arg = (args.name or "").strip()
+    if contact_id:
+        contact = find_contact_by_id(store, contact_id)
+    elif contact_name_arg:
+        contact = find_contact_by_id_or_name_raw(store, contact_name_arg)
+        if contact:
+            contact_id = contact["id"]
+    else:
+        raise RelationshipOSError("restore-contact requires --id or --name.")
+    if not contact:
+        raise RelationshipOSError("Contact not found.")
+
+    contact_name = contact.get("name") or contact_id
+    rows = store.read(CONTACTS)
+    for row in rows:
+        if row.get("id") == contact_id:
+            row["deleted_at"] = ""
+            row["updated_at"] = now_iso()
+            break
+    store.replace(CONTACTS, rows)
+    return {
+        "ok": True,
+        "command": "restore-contact",
+        "contact_id": contact_id,
+        "contact_name": contact_name,
+        "message": f"Restored {contact_name!r} from trash.",
+    }
+
+
+def cmd_purge_contact(args: argparse.Namespace) -> Dict[str, object]:
+    """Permanently delete a contact and all linked data. Cannot be undone."""
+    store = get_store()
+    store.ensure()
+    contact_id = (args.contact_id or "").strip()
+    contact_name_arg = (args.name or "").strip()
+    if contact_id:
+        contact = find_contact_by_id(store, contact_id)
+    elif contact_name_arg:
+        contact = find_contact_by_id_or_name_raw(store, contact_name_arg)
+        if contact:
+            contact_id = contact["id"]
+    else:
+        raise RelationshipOSError("purge-contact requires --id or --name.")
+    if not contact:
+        raise RelationshipOSError("Contact not found.")
+
+    contact_name = contact.get("name") or contact_id
+
+    contact_rows = store.read(CONTACTS)
+    contact_rows = [r for r in contact_rows if r.get("id") != contact_id]
+    store.replace(CONTACTS, contact_rows)
+
+    tp_rows = store.read(TOUCHPOINTS)
+    tp_deleted = sum(1 for r in tp_rows if r.get("contact_id") == contact_id)
+    tp_rows = [r for r in tp_rows if r.get("contact_id") != contact_id]
+    if tp_deleted:
+        store.replace(TOUCHPOINTS, tp_rows)
+
+    rem_rows = store.read(REMINDERS)
+    rem_deleted = sum(1 for r in rem_rows if r.get("contact_id") == contact_id)
+    rem_rows = [r for r in rem_rows if r.get("contact_id") != contact_id]
+    if rem_deleted:
+        store.replace(REMINDERS, rem_rows)
+
+    pol_rows = store.read(POLICIES)
+    pol_deleted = sum(1 for r in pol_rows if r.get("contact_id") == contact_id)
+    pol_rows = [r for r in pol_rows if r.get("contact_id") != contact_id]
+    if pol_deleted:
+        store.replace(POLICIES, pol_rows)
+
+    rel_rows = store.read(RELATIONSHIPS)
+    rel_deleted = sum(
+        1 for r in rel_rows
+        if r.get("from_contact_id") == contact_id or r.get("to_contact_id") == contact_id
+    )
+    rel_rows = [
+        r for r in rel_rows
+        if r.get("from_contact_id") != contact_id and r.get("to_contact_id") != contact_id
+    ]
+    if rel_deleted:
+        store.replace(RELATIONSHIPS, rel_rows)
+
+    return {
+        "ok": True,
+        "command": "purge-contact",
+        "contact_id": contact_id,
+        "contact_name": contact_name,
+        "touchpoints_deleted": tp_deleted,
+        "reminders_deleted": rem_deleted,
+        "policies_deleted": pol_deleted,
+        "relationships_deleted": rel_deleted,
+        "message": f"Permanently purged {contact_name!r} and all linked data.",
+    }
+
+
+def _read_tabular_file(file_path: str) -> List[Dict[str, str]]:
+    """Read a CSV or xlsx file and return rows as a list of dicts.
+
+    Detects format by extension (.xlsx / .xlsm → xlsx parser; anything else → csv).
+    Uses only Python stdlib — no openpyxl or pandas required.
+    """
+    import os as _os
+    import zipfile as _zf
+    import xml.etree.ElementTree as _ET
+
+    ext = _os.path.splitext(file_path)[1].lower()
+
+    if ext in (".xlsx", ".xlsm"):
+        # ── xlsx branch ────────────────────────────────────────────────────
+        _NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+        _tag = lambda name: f"{{{_NS}}}{name}"  # noqa: E731
+
+        with _zf.ZipFile(file_path, "r") as zf:
+            names = zf.namelist()
+
+            # Shared string table
+            shared_strings: List[str] = []
+            if "xl/sharedStrings.xml" in names:
+                ss_root = _ET.fromstring(zf.read("xl/sharedStrings.xml"))
+                for si in ss_root.iter(_tag("si")):
+                    text = "".join(
+                        (t.text or "") for t in si.iter(_tag("t"))
+                    )
+                    shared_strings.append(text)
+
+            # First worksheet
+            ws_path = next(
+                (n for n in names if n.startswith("xl/worksheets/") and n.endswith(".xml")),
+                None,
+            )
+            if ws_path is None:
+                return []
+
+            ws_root = _ET.fromstring(zf.read(ws_path))
+
+        def _col_num(ref: str) -> int:
+            """'A' → 1, 'B' → 2, 'AA' → 27, …  (strips digits first)."""
+            letters = "".join(c for c in ref if c.isalpha())
+            n = 0
+            for ch in letters.upper():
+                n = n * 26 + (ord(ch) - 64)
+            return n
+
+        all_rows: List[List[str]] = []
+        max_col = 0
+        last_row_num = 0
+
+        for row_el in ws_root.iter(_tag("row")):
+            row_num = int(row_el.get("r", "0") or "0")
+            # If there is a gap of 2+ rows (e.g. the 2-row separator between
+            # data and notes in our generated templates), stop reading.
+            if last_row_num > 0 and row_num - last_row_num >= 2:
+                break
+            last_row_num = row_num
+
+            cells: Dict[int, str] = {}
+            for c in row_el.iter(_tag("c")):
+                ref  = c.get("r", "")
+                ctype = c.get("t", "")
+                v_el  = c.find(_tag("v"))
+                ci    = _col_num(ref) if ref else 0
+
+                if ctype == "s":      # shared string index
+                    idx = int(v_el.text) if v_el is not None and v_el.text else 0
+                    value = shared_strings[idx] if 0 <= idx < len(shared_strings) else ""
+                elif ctype == "inlineStr":
+                    t_el = c.find(f".//{_tag('t')}")
+                    value = (t_el.text or "") if t_el is not None else ""
+                elif ctype in ("b", "e", "str"):
+                    value = (v_el.text or "") if v_el is not None else ""
+                else:                # number or date stored as number
+                    value = (v_el.text or "") if v_el is not None else ""
+
+                if ci > 0:
+                    cells[ci] = value
+                    max_col = max(max_col, ci)
+
+            all_rows.append([cells.get(i, "") for i in range(1, max_col + 1)])
+
+        if not all_rows:
+            return []
+
+        # Auto-detect the header row: the first row with 2+ non-empty cells.
+        # This skips title banners and spacer rows that our templates include.
+        header_idx = 0
+        for idx, row in enumerate(all_rows):
+            if sum(1 for v in row if v.strip()) >= 2:
+                header_idx = idx
+                break
+
+        headers = all_rows[header_idx]
+        result: List[Dict[str, str]] = []
+        for data_row in all_rows[header_idx + 1:]:
+            # Pad short rows
+            while len(data_row) < len(headers):
+                data_row.append("")
+            result.append({h: data_row[i] for i, h in enumerate(headers) if h})
+
+        # Excel stores dates as serial numbers (days since 1899-12-30). When
+        # Jovial fills a date cell in Excel, our parser pulls the raw number
+        # (e.g. 43622 = 2019-05-15). For columns we know are dates, convert
+        # those serials back to ISO YYYY-MM-DD before returning.
+        _convert_excel_date_serials(result)
+        return result
+
+    else:
+        # ── CSV branch ─────────────────────────────────────────────────────
+        import csv as _csv
+        try:
+            with open(file_path, newline="", encoding="utf-8-sig") as fh:
+                return list(_csv.DictReader(fh))
+        except Exception as exc:
+            raise RelationshipOSError(f"Could not read CSV: {exc}") from exc
+
+
+# Columns whose values we'll auto-convert from Excel serial numbers to ISO
+# dates during xlsx import. Add new date columns here.
+DATE_COLUMNS_FOR_IMPORT = {
+    "start_date", "review_date", "valuation_date", "last_reviewed",
+    "birthday", "lock_in_end_date", "next_review_date",
+}
+
+
+def _convert_excel_date_serials(rows: List[Dict[str, str]]) -> None:
+    """In-place: replace Excel date serials with ISO YYYY-MM-DD strings.
+
+    Detects pure-numeric values in known date columns and converts using the
+    1899-12-30 epoch (which compensates for Excel's 1900 leap-year bug for
+    all dates after 28 Feb 1900). Values that don't look like serials (text,
+    already-ISO strings, etc.) are left untouched.
+    """
+    from datetime import date as _date, timedelta as _td
+    epoch = _date(1899, 12, 30)
+    for row in rows:
+        for col, value in list(row.items()):
+            if col not in DATE_COLUMNS_FOR_IMPORT:
+                continue
+            s = (value or "").strip()
+            if not s:
+                continue
+            # Already in ISO-like form (starts with 4-digit year + dash)?
+            # Skip — don't touch values that already look like dates.
+            if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+                continue
+            try:
+                # Strict numeric. Excel serials are usually small positive
+                # integers; allow floats too (Excel datetimes carry a fraction
+                # for the time-of-day).
+                serial = float(s)
+            except ValueError:
+                continue
+            # Excel serials for real-world dates: 1 (1900-01-01) ≈ to
+            # ~73415 (year 2100). Anything outside that range is almost
+            # certainly NOT a date — leave it alone.
+            if not (1 <= serial <= 100000):
+                continue
+            try:
+                converted = epoch + _td(days=int(serial))
+                row[col] = converted.isoformat()
+            except (OverflowError, ValueError):
+                # Conversion failed; leave the raw value so the user can fix.
+                pass
+
+
+def cmd_bulk_import_policies(args: argparse.Namespace) -> Dict[str, object]:
+    """Bulk-import policies from a CSV or xlsx file for a given contact."""
+    store = get_store()
+    store.ensure()
+
+    contact_id = (getattr(args, "contact_id", "") or "").strip()
+    contact_name_arg = (getattr(args, "name", "") or "").strip()
+    file_path = (getattr(args, "file", "") or "").strip()
+
+    if not file_path:
+        raise RelationshipOSError("bulk-import-policies requires --file.")
+
+    if contact_id:
+        contact = find_contact_by_id(store, contact_id)
+    elif contact_name_arg:
+        contact = find_contact(store, contact_name_arg)
+        if contact:
+            contact_id = contact["id"]
+    else:
+        raise RelationshipOSError("bulk-import-policies requires --id or --name.")
+    if not contact:
+        raise RelationshipOSError("Contact not found.")
+
+    contact_name = contact.get("name") or contact_id
+
+    import os as _os
+    if not _os.path.isfile(file_path):
+        raise RelationshipOSError(f"File not found: {file_path!r}")
+
+    try:
+        rows_data = _read_tabular_file(file_path)
+    except RelationshipOSError:
+        raise
+    except Exception as exc:
+        raise RelationshipOSError(f"Could not read file: {exc}") from exc
+
+    # Map CSV header aliases → PolicyRow field names.
+    FIELD_ALIASES: Dict[str, str] = {
+        "insurer": "insurer", "company": "insurer",
+        "plan": "plan_name", "plan_name": "plan_name",
+        "type": "policy_type", "policy_type": "policy_type",
+        "policy_number": "policy_number", "number": "policy_number",
+        "sum_assured": "sum_assured", "sum assured": "sum_assured",
+        "premium": "premium_amount", "premium_amount": "premium_amount",
+        "frequency": "premium_frequency", "premium_frequency": "premium_frequency",
+        "premium_term": "premium_term",
+        "policy_term": "policy_term",
+        "payment_method": "payment_method",
+        "start_date": "start_date", "start": "start_date",
+        "review_date": "review_date", "review": "review_date",
+        "review_frequency": "review_frequency",
+        "status": "status",
+        "notes": "notes",
+    }
+
+    now = now_iso()
+    created_ids: list = []
+    pol_rows = store.read(POLICIES)
+
+    for row_dict in rows_data:
+        payload: Dict[str, str] = {
+            "contact_id": contact_id,
+            "contact_name": contact_name,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for header, value in row_dict.items():
+            key = (header or "").strip().lower().replace(" ", "_")
+            mapped = FIELD_ALIASES.get(key) or FIELD_ALIASES.get(header.strip().lower())
+            if mapped and (value or "").strip():
+                payload[mapped] = value.strip()
+
+        # Skip blank rows (must have at least insurer or plan_name)
+        if not payload.get("insurer", "").strip() and not payload.get("plan_name", "").strip():
+            continue
+
+        new_pol_id = make_id("pol")
+        payload["id"] = new_pol_id
+        pol_rows.append(payload)
+        created_ids.append(new_pol_id)
+
+    if created_ids:
+        store.replace(POLICIES, pol_rows)
+
+    return {
+        "ok": True,
+        "command": "bulk-import-policies",
+        "contact_id": contact_id,
+        "contact_name": contact_name,
+        "created": len(created_ids),
+        "policy_ids": created_ids,
+        "message": f"Imported {len(created_ids)} polic{'y' if len(created_ids) == 1 else 'ies'} for {contact_name!r}.",
+    }
+
+
+def cmd_bulk_upsert_investments(args: argparse.Namespace) -> Dict[str, object]:
+    """Smart upsert of investment policies from the dashboard template.
+
+    Two workflows in one command:
+
+    1.  **Monthly refresh** (legacy path) — rows whose ``policy_number`` matches
+        an existing policy have total_premiums_paid, current_value, and
+        optionally valuation_date / portfolio tag / holiday months refreshed.
+
+    2.  **Onboarding create** (new path) — rows whose policy_number doesn't
+        match try to be attached to an existing client by name:
+          * exact name match (case + whitespace normalised) → create policy.
+          * fuzzy near-match → returned in ``needs_decision`` so the UI can
+            prompt the user to disambiguate; the row is NOT written this pass.
+          * no match at all → returned in ``errors``; the user must create
+            the client first.
+
+    Creates are additive only: a new policy row is appended for the matched
+    contact_id. We never touch the contact's other policies.
+
+    ── Two-call protocol (preview, then apply) ─────────────────────────────
+    When the caller passes ``--dry-run``, nothing is written and the response
+    classifies every row (would update / would create / needs decision /
+    error / skipped). The UI shows this as a confirmation dialog.
+
+    The caller then re-invokes WITHOUT --dry-run, optionally passing
+    ``--name-resolution`` — a JSON map of ``{ "name in sheet": "contact_id" }``
+    that resolves the ``needs_decision`` rows. A value of ``"__skip__"`` for a
+    name means: drop those rows from this batch.
+
+    Optional --as-of YYYY-MM-DD updates the global Correct As Of setting and
+    backfills valuation_date on any updated row that didn't include one.
+    """
+    import os as _os
+    import difflib
+    store = get_store()
+    store.ensure()
+
+    file_path = (getattr(args, "file", "") or "").strip()
+    if not file_path:
+        raise RelationshipOSError("bulk-upsert-investments requires --file.")
+    if not _os.path.isfile(file_path):
+        raise RelationshipOSError(f"File not found: {file_path!r}")
+
+    dry_run = bool(getattr(args, "dry_run", False))
+
+    # Parse the optional name-resolution map. Keys are normalised to lower /
+    # whitespace-collapsed so the UI doesn't have to send byte-exact strings.
+    raw_resolution = (getattr(args, "name_resolution", "") or "").strip()
+    name_resolution: Dict[str, str] = {}
+    if raw_resolution:
+        try:
+            parsed = json.loads(raw_resolution)
+        except Exception as exc:
+            raise RelationshipOSError(
+                f"--name-resolution must be a JSON object: {exc}"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise RelationshipOSError("--name-resolution must be a JSON object.")
+        for k, v in parsed.items():
+            key = " ".join(str(k).strip().lower().split())
+            name_resolution[key] = str(v).strip()
+
+    as_of = (getattr(args, "as_of", "") or "").strip()
+    if as_of:
+        parse_iso_date_strict(as_of, "--as-of")
+
+    try:
+        rows_data = _read_tabular_file(file_path)
+    except RelationshipOSError:
+        raise
+    except Exception as exc:
+        raise RelationshipOSError(f"Could not read file: {exc}") from exc
+
+    contacts = store.read(CONTACTS)
+    products = store.read(INVESTMENT_PRODUCTS)
+    pol_rows = store.read(POLICIES)
+
+    # Build lookup indices for fast matching.
+    # Exclude soft-deleted contacts so we don't link new policies to a
+    # contact that's been moved to Trash. Archived contacts ARE allowed —
+    # those are just hidden from default lists, the contact still exists.
+    contact_by_name = {
+        (c.get("name") or "").strip().lower(): c
+        for c in contacts
+        if (c.get("name") or "").strip() and not (c.get("deleted_at") or "").strip()
+    }
+    product_by_name = {
+        (p.get("name") or "").strip().lower(): p
+        for p in products
+        if not (p.get("archived_at") or "").strip()
+    }
+    policy_by_number = {
+        (p.get("policy_number") or "").strip(): p
+        for p in pol_rows
+        if (p.get("policy_number") or "").strip()
+    }
+
+    # Build a portfolio-tag lookup that accepts either the canonical enum
+    # ("elite_adventurous") or the human-readable label ("Elite Adventurous"),
+    # case-insensitive and tolerant of spaces/dashes. Anything that doesn't
+    # match falls back to a 'custom' tag with the original string as the
+    # custom label.
+    PORTFOLIO_TAG_LABELS = {
+        "pro_adventurous": "pro adventurous",
+        "pro_balanced":    "pro balanced",
+        "pro_cautious":    "pro cautious",
+        "elite_adventurous": "elite adventurous",
+        "elite_balanced":  "elite balanced",
+        "steady":          "steady",
+        "ferrari":         "ferrari",
+        "custom":          "custom",
+    }
+    _portfolio_lookup: Dict[str, str] = {}
+    for tag, label in PORTFOLIO_TAG_LABELS.items():
+        _portfolio_lookup[tag] = tag
+        _portfolio_lookup[label] = tag
+        _portfolio_lookup[label.replace(" ", "")] = tag
+
+    def _classify_portfolio(tag_value: str, label_value: str) -> Tuple[str, str]:
+        """Return (portfolio_tag, portfolio_label) given raw inputs from the
+        sheet. If we can recognise the input as one of the canonical tags,
+        the label is cleared (we display the tag's name from the enum).
+        Otherwise the raw value becomes a 'custom' label."""
+        for raw in (tag_value, label_value):
+            normalized = raw.strip().lower().replace("-", " ").replace("_", " ")
+            normalized = " ".join(normalized.split())  # collapse whitespace
+            if not normalized:
+                continue
+            for key in (normalized, normalized.replace(" ", "_"), normalized.replace(" ", "")):
+                if key in _portfolio_lookup:
+                    matched_tag = _portfolio_lookup[key]
+                    # Clear the label unless this is an explicit 'custom' with a description.
+                    if matched_tag == "custom":
+                        return matched_tag, label_value or tag_value
+                    return matched_tag, ""
+        # Nothing matched. If either field had a value, treat the user's
+        # input as a custom portfolio name.
+        custom_label = (label_value or tag_value).strip()
+        if custom_label:
+            return "custom", custom_label
+        return "", ""
+
+    now = now_iso()
+    updated_ids: list = []
+    created_ids: list = []
+    skipped: list = []
+    needs_decision: list = []
+    errors: list = []
+
+    # Build a fuzzy-match index over active (non-trashed) contacts. The keys
+    # are whitespace-collapsed lowercased names — same normalisation we apply
+    # to the incoming sheet's client_name — so we don't trip over double
+    # spaces or stray padding when an exact match exists.
+    def _norm_name(s: str) -> str:
+        return " ".join((s or "").strip().lower().split())
+
+    active_contacts = [
+        c for c in contacts
+        if (c.get("name") or "").strip() and not (c.get("deleted_at") or "").strip()
+    ]
+    contact_by_norm_name = {_norm_name(c.get("name") or ""): c for c in active_contacts}
+    all_norm_names = list(contact_by_norm_name.keys())
+
+    def _resolve_name(typed_name: str) -> Tuple[str, Optional[Dict[str, str]], list]:
+        """Resolve a client name against the active contact list.
+
+        Returns (status, contact_or_None, candidates):
+          status = "exact" → contact is the exact match.
+          status = "fuzzy" → no exact match but ``candidates`` holds near
+                              matches (list of {contact_id, name, score}); the
+                              caller should surface them for the user to pick.
+          status = "none"  → no plausible match at all.
+        """
+        key = _norm_name(typed_name)
+        if not key:
+            return ("none", None, [])
+        exact = contact_by_norm_name.get(key)
+        if exact:
+            return ("exact", exact, [])
+        # difflib cutoff of 0.6 is a reasonable default — picks up single-char
+        # typos and short additions/removals, rejects unrelated names.
+        close = difflib.get_close_matches(key, all_norm_names, n=3, cutoff=0.6)
+        cands = []
+        for c_key in close:
+            cnt = contact_by_norm_name[c_key]
+            score = difflib.SequenceMatcher(None, key, c_key).ratio()
+            cands.append({
+                "contact_id": cnt.get("id") or "",
+                "name": cnt.get("name") or "",
+                "score": round(score, 3),
+            })
+        return ("fuzzy" if cands else "none", None, cands)
+
+    def _build_new_policy(contact: Dict[str, str], row: Dict[str, str]) -> Dict[str, str]:
+        """Construct a new POLICIES row from a normalised investment-template row.
+
+        Looks up the named product in the catalog so premium_term and
+        lock_in_period are inherited automatically (matching what the UI
+        does when Jovial picks a product from the dropdown).
+
+        Additive only — caller appends to pol_rows; never touches the
+        contact's existing policies.
+        """
+        pname = row.get("product_name", "")
+        product = product_by_name.get(pname.strip().lower()) if pname else None
+        policy: Dict[str, str] = {
+            "id": make_id("pol"),
+            "contact_id": contact.get("id") or "",
+            "plan_name": pname,
+            "policy_type": "investment",
+            "policy_number": row.get("policy_number", ""),
+            "premium_amount": row.get("premium_amount", ""),
+            "premium_frequency": row.get("premium_frequency", ""),
+            "start_date": row.get("start_date", ""),
+            "status": "active",
+            "notes": row.get("notes", ""),
+            "portfolio": row.get("portfolio", ""),
+            "portfolio_tag": row.get("portfolio_tag", ""),
+            "total_premiums_paid": row.get("total_premiums_paid", ""),
+            "current_value": row.get("current_value", ""),
+            "valuation_date": row.get("valuation_date", "") or (as_of if as_of else ""),
+            "premium_holiday_months": row.get("premium_holiday_months", ""),
+            "created_at": now,
+            "updated_at": now,
+        }
+        if product:
+            policy["product_id"] = product.get("id") or ""
+            policy["premium_term"] = product.get("premium_term") or ""
+            policy["lock_in_period"] = product.get("lock_in_period") or ""
+        return policy
+
+    for ri, row_dict in enumerate(rows_data, start=1):
+        # Normalize header keys to lowercase, underscore-separated.
+        norm = {
+            (k or "").strip().lower().replace(" ", "_"): (v or "").strip()
+            for k, v in row_dict.items()
+        }
+
+        policy_number = norm.get("policy_number", "")
+        client_name   = norm.get("client_name", "")
+        product_name  = norm.get("product_name", "")
+        portfolio_tag = norm.get("portfolio_tag", "")
+        portfolio     = norm.get("portfolio", "")
+        prem_amount   = norm.get("premium_amount", "")
+        prem_freq     = norm.get("premium_frequency", "")
+        start_date    = norm.get("start_date", "")
+        total_paid    = norm.get("total_premiums_paid", "")
+        current_val   = norm.get("current_value", "")
+        valuation_dt  = norm.get("valuation_date", "")
+        holiday_months = norm.get("premium_holiday_months", "")
+        notes_val     = norm.get("notes", "")
+
+        # Smart-classify the portfolio columns: accept either the tag enum
+        # or its human label, and treat anything we don't recognise as a
+        # custom portfolio (preserves the user's typed value).
+        portfolio_tag, portfolio = _classify_portfolio(portfolio_tag, portfolio)
+
+        # Skip completely blank rows silently.
+        if not any([policy_number, client_name, product_name, total_paid, current_val]):
+            continue
+
+        # ── UPDATE branch ────────────────────────────────────────────────
+        if policy_number and policy_number in policy_by_number:
+            target = policy_by_number[policy_number]
+            changed_fields = []
+            if total_paid:
+                target["total_premiums_paid"] = total_paid
+                changed_fields.append("total_premiums_paid")
+            if current_val:
+                target["current_value"] = current_val
+                changed_fields.append("current_value")
+            if valuation_dt:
+                # Row-level date is Jovial's explicit override for this policy.
+                parse_iso_date_strict(valuation_dt, f"row {ri} valuation_date")
+                target["valuation_date"] = valuation_dt
+                changed_fields.append("valuation_date")
+            elif as_of:
+                # Default: every updated row in this batch gets the new
+                # snapshot date. Honest representation of when the fund value
+                # was last refreshed.
+                if (target.get("valuation_date") or "") != as_of:
+                    target["valuation_date"] = as_of
+                    changed_fields.append("valuation_date")
+            # Allow portfolio re-tagging and holiday count updates through the
+            # bulk upload too — Jovial may correct these inline.
+            # Portfolio tag + label always travel together: if the user
+            # provided either input, write both fields so a stale custom
+            # label can be cleared when the tag becomes a recognised one.
+            if portfolio_tag or portfolio:
+                if (target.get("portfolio_tag") or "") != portfolio_tag:
+                    target["portfolio_tag"] = portfolio_tag
+                    changed_fields.append("portfolio_tag")
+                if (target.get("portfolio") or "") != portfolio:
+                    target["portfolio"] = portfolio
+                    changed_fields.append("portfolio")
+            if holiday_months and (target.get("premium_holiday_months") or "") != holiday_months:
+                target["premium_holiday_months"] = holiday_months
+                changed_fields.append("premium_holiday_months")
+            if changed_fields:
+                target["updated_at"] = now
+                updated_ids.append(target.get("id") or "")
+            continue
+
+        # Pack the normalised row once so _build_new_policy / dialog payloads
+        # share the same field names.
+        row_payload = {
+            "policy_number": policy_number,
+            "client_name": client_name,
+            "product_name": product_name,
+            "portfolio_tag": portfolio_tag,
+            "portfolio": portfolio,
+            "premium_amount": prem_amount,
+            "premium_frequency": prem_freq,
+            "start_date": start_date,
+            "total_premiums_paid": total_paid,
+            "current_value": current_val,
+            "valuation_date": valuation_dt,
+            "premium_holiday_months": holiday_months,
+            "notes": notes_val,
+        }
+
+        # ── CREATE branch — no policy_number match, try the client name ──
+        # 1. If the UI has already supplied a resolution for this row's name,
+        #    honour it (skip or attach to the named contact_id).
+        # 2. Else, try an exact (normalised) name match.
+        # 3. Else, surface fuzzy candidates for the UI to confirm.
+        # 4. Else, error out — Jovial must create the contact first.
+        resolved_key = _norm_name(client_name)
+        if resolved_key and resolved_key in name_resolution:
+            target_id = name_resolution[resolved_key]
+            if target_id == "__skip__":
+                skipped.append({
+                    "row": ri,
+                    "policy_number": policy_number,
+                    "client_name": client_name,
+                    "reason": "skipped by user during disambiguation",
+                })
+                continue
+            chosen = next(
+                (c for c in active_contacts if (c.get("id") or "") == target_id),
+                None,
+            )
+            if not chosen:
+                errors.append({
+                    "row": ri,
+                    "client_name": client_name,
+                    "reason": f"resolved contact_id {target_id!r} not found in active contacts",
+                })
+                continue
+            new_pol = _build_new_policy(chosen, row_payload)
+            pol_rows.append(new_pol)
+            created_ids.append(new_pol["id"])
+            continue
+
+        status, exact_contact, cands = _resolve_name(client_name)
+        if status == "exact" and exact_contact is not None:
+            new_pol = _build_new_policy(exact_contact, row_payload)
+            pol_rows.append(new_pol)
+            created_ids.append(new_pol["id"])
+            continue
+
+        if status == "fuzzy":
+            needs_decision.append({
+                "row": ri,
+                "client_name": client_name,
+                "policy_number": policy_number,
+                "product_name": product_name,
+                "candidates": cands,
+            })
+            continue
+
+        # status == "none" — nothing close enough to suggest.
+        if not client_name:
+            errors.append({
+                "row": ri,
+                "client_name": "",
+                "reason": "row has no policy_number and no client_name — cannot match",
+            })
+        else:
+            errors.append({
+                "row": ri,
+                "client_name": client_name,
+                "reason": (
+                    f"no client matching {client_name!r} — create the contact on the "
+                    "Clients page first, then re-upload this template"
+                ),
+            })
+
+    # ── Write phase. Skip entirely on dry-run — caller is previewing. ───
+    if not dry_run:
+        if updated_ids or created_ids:
+            store.replace(POLICIES, pol_rows)
+
+        # Update the Correct As Of setting if --as-of was provided.
+        if as_of:
+            settings_rows = store.read(SETTINGS)
+            target = next((r for r in settings_rows if r.get("key") == "investments_correct_as_of"), None)
+            if target:
+                target["value"] = as_of
+                store.replace(SETTINGS, settings_rows)
+            else:
+                store.append(SETTINGS, {"key": "investments_correct_as_of", "value": as_of})
+
+    # Friendly summary. Different phrasing for dry-run vs apply so the user
+    # is never confused about whether anything actually moved.
+    if dry_run:
+        message = (
+            f"Preview: would update {len(updated_ids)}, "
+            f"would create {len(created_ids)}, "
+            f"needs decision {len(needs_decision)}, "
+            f"errors {len(errors)}."
+        )
+    else:
+        message = (
+            f"Updated {len(updated_ids)}, "
+            f"created {len(created_ids)}, "
+            f"needs decision {len(needs_decision)}, "
+            f"errors {len(errors)}, "
+            f"skipped {len(skipped)}."
+        )
+
+    return {
+        "ok": True,
+        "command": "bulk-upsert-investments",
+        "dry_run": dry_run,
+        "created": len(created_ids),
+        "created_ids": created_ids,
+        "updated": len(updated_ids),
+        "skipped": len(skipped),
+        "skipped_rows": skipped,
+        "needs_decision": needs_decision,
+        "errors": errors,
+        "as_of": as_of,
+        "message": message,
+    }
+
+
+def cmd_bulk_import_contacts(args: argparse.Namespace) -> Dict[str, object]:
+    """Bulk-import contacts from a CSV or xlsx file.
+
+    Required column: ``name``.
+    Optional columns mirror the create-contact fields:
+    type, phone, email, occupation, company, address, birthday,
+    referral_source, notes.
+
+    Duplicate names (case-insensitive, ignoring archived contacts) are skipped
+    with a warning so a re-import is safe.
+    """
+    import os as _os
+    store = get_store()
+    store.ensure()
+
+    file_path = (getattr(args, "file", "") or "").strip()
+    if not file_path:
+        raise RelationshipOSError("bulk-import-contacts requires --file.")
+
+    if not _os.path.isfile(file_path):
+        raise RelationshipOSError(f"File not found: {file_path!r}")
+
+    try:
+        rows_data = _read_tabular_file(file_path)
+    except RelationshipOSError:
+        raise
+    except Exception as exc:
+        raise RelationshipOSError(f"Could not read file: {exc}") from exc
+
+    # Alias map: CSV column name → internal contact field.
+    FIELD_ALIASES: Dict[str, str] = {
+        "name": "name",
+        "full_name": "name",
+        "full name": "name",
+        "type": "type",
+        "contact_type": "type",
+        "stage": "relationship_stage",
+        "relationship_stage": "relationship_stage",
+        "phone": "phone",
+        "mobile": "phone",
+        "email": "email",
+        "occupation": "occupation",
+        "job_title": "occupation",
+        "job title": "occupation",
+        "title": "occupation",
+        "company": "company",
+        "employer": "company",
+        "firm": "company",
+        "address": "address",
+        "birthday": "birthday",
+        "dob": "birthday",
+        "date_of_birth": "birthday",
+        "date of birth": "birthday",
+        "referral_source": "referral_source",
+        "referred_by": "referral_source",
+        "referred by": "referral_source",
+        "referral": "referral_source",
+        "notes": "notes",
+        "remarks": "notes",
+    }
+
+    existing_rows = store.read(CONTACTS)
+    # Treat archived AND trashed rows as "not present" for duplicate-name
+    # purposes — matches cmd_create_contact's behaviour so the single-add and
+    # bulk-import paths stay consistent.
+    existing_lower = {
+        (r.get("name") or "").strip().lower()
+        for r in existing_rows
+        if not (r.get("archived_at") or "").strip()
+        and not (r.get("deleted_at") or "").strip()
+    }
+
+    now = now_iso()
+    created: list = []
+    skipped: list = []
+    errors: list = []
+
+    for i, row_dict in enumerate(rows_data, start=2):  # row 1 = header
+        # Build normalised payload from CSV row.
+        payload: Dict[str, str] = {}
+        for header, value in row_dict.items():
+            key = (header or "").strip().lower().replace(" ", "_")
+            mapped = FIELD_ALIASES.get(key) or FIELD_ALIASES.get((header or "").strip().lower())
+            if mapped and (value or "").strip():
+                payload[mapped] = value.strip()
+
+        name = payload.get("name", "").strip()
+        if not name:
+            continue  # blank row — silently skip
+
+        if name.lower() in existing_lower:
+            skipped.append({"row": i, "name": name, "reason": "Duplicate name — contact already exists"})
+            continue
+
+        # Validate type and stage.
+        contact_type = payload.get("type", "warming").strip().lower()
+        if contact_type not in VALID_CONTACT_TYPES:
+            contact_type = "warming"
+
+        relationship_stage = payload.get("relationship_stage", "warming").strip().lower()
+        if relationship_stage not in VALID_STAGES:
+            relationship_stage = "warming"
+
+        # Build custom_fields from:
+        #   1. A "custom_fields" column containing a JSON object, e.g. {"annual_income":"80000"}
+        #   2. Any column prefixed with "cf_", e.g. cf_annual_income → annual_income
+        custom: Dict[str, str] = {}
+        if "custom_fields" in payload:
+            try:
+                parsed = json.loads(payload["custom_fields"])
+                if isinstance(parsed, dict):
+                    custom.update({str(k): str(v) for k, v in parsed.items() if v})
+            except Exception:
+                pass  # malformed JSON — ignore silently
+        for header, value in row_dict.items():
+            col = (header or "").strip().lower()
+            if col.startswith("cf_") and (value or "").strip():
+                field_key = col[3:].replace("_", " ").strip()
+                if field_key:
+                    custom[field_key] = value.strip()
+
+        contact_id = make_id("c")
+        new_contact: Dict[str, str] = {
+            "id": contact_id,
+            "name": name,
+            "type": contact_type,
+            "relationship_stage": relationship_stage,
+            "phone": payload.get("phone", ""),
+            "email": payload.get("email", ""),
+            "occupation": payload.get("occupation", ""),
+            "company": payload.get("company", ""),
+            "address": payload.get("address", ""),
+            "birthday": payload.get("birthday", ""),
+            "family": "",
+            "policies": "",
+            "financial_concerns": "",
+            "interests": "",
+            "referral_source": payload.get("referral_source", ""),
+            "next_review_date": "",
+            "notes": payload.get("notes", ""),
+            "last_touch_date": "",
+            "archived_at": "",
+            "custom_fields": json.dumps(custom, ensure_ascii=False) if custom else "{}",
+            "created_at": now,
+            "updated_at": now,
+        }
+        existing_rows.append(new_contact)
+        existing_lower.add(name.lower())
+        log_event(
+            store,
+            "contact_created",
+            contact_id=contact_id,
+            subject_id=contact_id,
+            payload={"name": name, "type": contact_type, "source": "bulk-import"},
+            source="app:bulk-import-contacts",
+        )
+        created.append({"id": contact_id, "name": name})
+
+    if created:
+        store.replace(CONTACTS, existing_rows)
+        sync_consultant_views(store)
+
+    return {
+        "ok": True,
+        "command": "bulk-import-contacts",
+        "created": len(created),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "contacts": created,
+        "skipped_details": skipped,
+        "error_details": errors,
+        "message": (
+            f"Imported {len(created)} contact{'s' if len(created) != 1 else ''}. "
+            f"{len(skipped)} skipped (duplicates). "
+            f"{len(errors)} errors."
+        ),
+    }
+
+
+def _build_xlsx_stdlib(
+    sheet_title: str,
+    headers: List[str],
+    col_widths: Dict[str, int],
+    sample_rows: List[List[str]],
+    notes_rows: List[List[str]],
+    prefill_rows: Optional[List[List[str]]] = None,
+) -> bytes:
+    """Build a styled .xlsx file using only Python stdlib (zipfile + io).
+
+    No third-party libraries required — xlsx is just a ZIP of XML files.
+
+    sample_rows render in the italic-grey "this is just an example" style.
+    prefill_rows render in the normal data style — used by the Investments
+    template to seed the user's existing client policies so she can update
+    only total_premiums_paid + current_value and reupload.
+    """
+    prefill_rows = prefill_rows or []
+    import io as _io
+    import zipfile as _zipfile
+
+    def _esc(s: str) -> str:
+        return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+    def _col(n: int) -> str:
+        """1-based column index → Excel letter (A, B, …, Z, AA, …)."""
+        r = ""
+        while n > 0:
+            n, rem = divmod(n - 1, 26)
+            r = chr(65 + rem) + r
+        return r
+
+    num_cols = len(headers)
+    last_col = _col(num_cols)
+
+    # ── Shared string table ──────────────────────────────────────────────────
+    _ss: List[str] = []
+    _ss_map: Dict[str, int] = {}
+
+    def _si(s: str) -> int:
+        if s not in _ss_map:
+            _ss_map[s] = len(_ss)
+            _ss.append(s)
+        return _ss_map[s]
+
+    title_si  = _si(sheet_title.upper())
+    header_si = [_si(h) for h in headers]
+    sample_si = [[_si(str(v)) for v in row] for row in sample_rows]
+    prefill_si = [[_si(str(v)) for v in row] for row in prefill_rows]
+    notes_si  = [_si(row[0]) if row else _si("") for row in notes_rows]
+
+    # ── Layout constants ─────────────────────────────────────────────────────
+    HEADER_ROW = 3
+    DATA_START = HEADER_ROW + 1
+    BLANK_ROWS = 30
+    NOTE_START = DATA_START + len(sample_rows) + len(prefill_rows) + BLANK_ROWS + 2
+
+    # Style indices (see cellXfs in styles_xml below)
+    S_TITLE     = 1
+    S_HEADER    = 2
+    S_SAMPLE    = 3
+    S_DATA      = 4
+    S_NOTE      = 5
+    S_NOTE_BOLD = 6
+
+    # ── Sheet rows ───────────────────────────────────────────────────────────
+    rows: List[str] = []
+
+    # Row 1: title banner (merged across all columns)
+    rows.append('<row r="1" ht="28" customHeight="1">')
+    rows.append(f'<c r="A1" s="{S_TITLE}" t="s"><v>{title_si}</v></c>')
+    for ci in range(2, num_cols + 1):
+        rows.append(f'<c r="{_col(ci)}1" s="{S_TITLE}"/>')
+    rows.append('</row>')
+
+    # Row 2: spacer
+    rows.append('<row r="2" ht="6" customHeight="1"/>')
+
+    # Row 3: column headers
+    rows.append(f'<row r="{HEADER_ROW}" ht="22" customHeight="1">')
+    for ci, hsi in enumerate(header_si, 1):
+        rows.append(f'<c r="{_col(ci)}{HEADER_ROW}" s="{S_HEADER}" t="s"><v>{hsi}</v></c>')
+    rows.append('</row>')
+
+    # Sample data rows (italic-grey "this is an example" style)
+    for ri_off, row_si in enumerate(sample_si):
+        ri = DATA_START + ri_off
+        rows.append(f'<row r="{ri}" ht="18" customHeight="1">')
+        for ci, vsi in enumerate(row_si, 1):
+            rows.append(f'<c r="{_col(ci)}{ri}" s="{S_SAMPLE}" t="s"><v>{vsi}</v></c>')
+        rows.append('</row>')
+
+    # Prefilled data rows (normal style — these are the user's real existing rows)
+    PREFILL_START = DATA_START + len(sample_rows)
+    for ri_off, row_si in enumerate(prefill_si):
+        ri = PREFILL_START + ri_off
+        rows.append(f'<row r="{ri}" ht="18" customHeight="1">')
+        for ci, vsi in enumerate(row_si, 1):
+            rows.append(f'<c r="{_col(ci)}{ri}" s="{S_DATA}" t="s"><v>{vsi}</v></c>')
+        rows.append('</row>')
+
+    # Blank data rows for user input
+    BLANK_START = PREFILL_START + len(prefill_rows)
+    for ri_off in range(BLANK_ROWS):
+        ri = BLANK_START + ri_off
+        rows.append(f'<row r="{ri}" ht="18" customHeight="1">')
+        for ci in range(1, num_cols + 1):
+            rows.append(f'<c r="{_col(ci)}{ri}" s="{S_DATA}"/>')
+        rows.append('</row>')
+
+    # Notes rows
+    note_merge_end = _col(min(num_cols, 6))
+    for ri_off, nsi in enumerate(notes_si):
+        ri = NOTE_START + ri_off
+        ns = S_NOTE_BOLD if ri_off == 0 else S_NOTE
+        rows.append(f'<row r="{ri}" ht="16" customHeight="1">')
+        rows.append(f'<c r="A{ri}" s="{ns}" t="s"><v>{nsi}</v></c>')
+        rows.append('</row>')
+
+    # ── Column widths ────────────────────────────────────────────────────────
+    cols_xml: List[str] = ["<cols>"]
+    for ci, hdr in enumerate(headers, 1):
+        w = col_widths.get(hdr, 20)
+        cols_xml.append(f'<col min="{ci}" max="{ci}" width="{w}" customWidth="1"/>')
+    cols_xml.append("</cols>")
+
+    # ── Merge cells ──────────────────────────────────────────────────────────
+    merge_count = 1 + len(notes_rows)
+    merges: List[str] = [f'<mergeCells count="{merge_count}">']
+    merges.append(f'<mergeCell ref="A1:{last_col}1"/>')
+    for ri_off in range(len(notes_rows)):
+        ri = NOTE_START + ri_off
+        merges.append(f'<mergeCell ref="A{ri}:{note_merge_end}{ri}"/>')
+    merges.append("</mergeCells>")
+
+    # ── Shared strings XML ───────────────────────────────────────────────────
+    sst_items = "".join(
+        f'<si><t xml:space="preserve">{_esc(s)}</t></si>' for s in _ss
+    )
+    sst_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        f' count="{len(_ss)}" uniqueCount="{len(_ss)}">{sst_items}</sst>'
+    )
+
+    # ── Styles XML ───────────────────────────────────────────────────────────
+    # fontId:   0=default  1=title(gold bold 13)  2=header(bold 11 dark)
+    #           3=sample(italic 10)  4=note(grey 9)  5=note-bold(dark 9)
+    # fillId:   0=none  1=gray125  2=dark(title bg)  3=warm(header bg)
+    #           4=grey(sample bg)  5=fafafa(notes bg)
+    # borderId: 0=none  1=thin bottom(CCCCCC)  2=gold top+bottom
+    styles_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<fonts count="6">'
+        '<font><sz val="11"/><name val="Calibri"/></font>'
+        '<font><b/><sz val="13"/><name val="Calibri"/><color rgb="FFC9A84C"/></font>'
+        '<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF1A1A1A"/></font>'
+        '<font><i/><sz val="10"/><name val="Calibri"/><color rgb="FF1A1A1A"/></font>'
+        '<font><sz val="9"/><name val="Calibri"/><color rgb="FF666666"/></font>'
+        '<font><b/><sz val="9"/><name val="Calibri"/><color rgb="FF444444"/></font>'
+        '</fonts>'
+        '<fills count="6">'
+        '<fill><patternFill patternType="none"/></fill>'
+        '<fill><patternFill patternType="gray125"/></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FF1A1A1A"/></patternFill></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFFDF6E3"/></patternFill></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F5"/></patternFill></fill>'
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFFAFAFA"/></patternFill></fill>'
+        '</fills>'
+        '<borders count="3">'
+        '<border><left/><right/><top/><bottom/><diagonal/></border>'
+        '<border><bottom><color rgb="FFCCCCCC"/></bottom></border>'
+        '<border><top><color rgb="FFC9A84C"/></top><bottom><color rgb="FFC9A84C"/></bottom></border>'
+        '</borders>'
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        '<cellXfs count="7">'
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1">'
+        '<alignment horizontal="left" vertical="center" indent="1"/></xf>'
+        '<xf numFmtId="0" fontId="2" fillId="3" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1">'
+        '<alignment horizontal="center" vertical="center"/></xf>'
+        '<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1">'
+        '<alignment horizontal="left" vertical="center"/></xf>'
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'
+        '<xf numFmtId="0" fontId="4" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+        '<xf numFmtId="0" fontId="5" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+        '</cellXfs>'
+        '</styleSheet>'
+    )
+
+    # ── Sheet XML ────────────────────────────────────────────────────────────
+    sheet_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheetViews><sheetView workbookViewId="0" tabSelected="1">'
+        f'<pane ySplit="{HEADER_ROW}" topLeftCell="A{DATA_START}"'
+        ' activePane="bottomLeft" state="frozen"/>'
+        '</sheetView></sheetViews>'
+        + "".join(cols_xml)
+        + "<sheetData>" + "".join(rows) + "</sheetData>"
+        + "".join(merges)
+        + "</worksheet>"
+    )
+
+    # ── Package XML files into a ZIP (xlsx format) ───────────────────────────
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        '<Override PartName="/xl/styles.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        '<Override PartName="/xl/sharedStrings.xml"'
+        ' ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
+        '</Types>'
+    )
+    root_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1"'
+        ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"'
+        ' Target="xl/workbook.xml"/>'
+        '</Relationships>'
+    )
+    workbook_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1"'
+        ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"'
+        ' Target="worksheets/sheet1.xml"/>'
+        '<Relationship Id="rId2"'
+        ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"'
+        ' Target="styles.xml"/>'
+        '<Relationship Id="rId3"'
+        ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings"'
+        ' Target="sharedStrings.xml"/>'
+        '</Relationships>'
+    )
+    workbook_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="Import" sheetId="1" r:id="rId1"/></sheets>'
+        '</workbook>'
+    )
+
+    buf = _io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", content_types)
+        zf.writestr("_rels/.rels", root_rels)
+        zf.writestr("xl/workbook.xml", workbook_xml)
+        zf.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
+        zf.writestr("xl/styles.xml", styles_xml)
+        zf.writestr("xl/sharedStrings.xml", sst_xml)
+        zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+    return buf.getvalue()
+
+
+def cmd_generate_template(args: argparse.Namespace) -> Dict[str, object]:
+    """Generate a styled Excel (.xlsx) import template and save it to vault/Downloads/.
+
+    Uses only Python stdlib (zipfile + io) — no third-party packages required.
+
+    Supported templates:
+      clients  — columns for bulk contact import (name, type, phone, email, …, custom fields)
+      policies — columns for bulk policy import (insurer, plan_name, premium_amount, …)
+
+    Returns a JSON payload with ``path`` pointing to the written file so the
+    caller (TypeScript via Tauri) can open it immediately.
+    """
+    name = (args.name or "").lower().strip()
+
+    # ── Template definitions ──────────────────────────────────────────────────
+
+    TEMPLATES: Dict[str, Dict[str, object]] = {
+        "clients": {
+            "sheet_title": "Clients Import Template",
+            "filename": "clients-template.xlsx",
+            "headers": [
+                "name", "type", "phone", "email",
+                "occupation", "company", "address",
+                "birthday", "referral_source", "notes",
+                "cf_annual_income", "cf_risk_appetite",
+            ],
+            "col_widths": {
+                "name": 28, "type": 18, "phone": 18, "email": 30,
+                "occupation": 24, "company": 24, "address": 36,
+                "birthday": 16, "referral_source": 22, "notes": 36,
+                "cf_annual_income": 20, "cf_risk_appetite": 20,
+            },
+            "sample_rows": [
+                [
+                    "Jane Tan", "client", "+65 9123 4567", "jane@example.com",
+                    "Business Owner", "Tan & Co",
+                    "10 Orchard Rd #08-01 Singapore 238896",
+                    "1985-06-15", "Referral from John Lim", "Met at networking event",
+                    "120000", "Moderate",
+                ],
+                [
+                    "David Ng", "warming", "+65 8765 4321", "david.ng@email.com",
+                    "Engineer", "TechCorp Pte Ltd",
+                    "", "1990-03-22", "", "", "", "",
+                ],
+            ],
+            "notes_rows": [
+                ["NOTES:"],
+                ["• type: client | warming | in_conversation | cold | prospect | candidate | advisor | other"],
+                ["• birthday: YYYY-MM-DD format"],
+                ["• cf_ columns are custom fields — rename or add more as needed (prefix must stay 'cf_')"],
+                ["• Existing clients are pre-filled — duplicate names are skipped automatically on re-import"],
+            ],
+            # Marker — handled below to pull live data from SQLite so the
+            # downloaded template always mirrors the current Clients dashboard.
+            "_prefill_from_db": True,
+        },
+        "policies": {
+            "sheet_title": "Policies Import Template",
+            "filename": "policies-template.xlsx",
+            "headers": [
+                "insurer", "plan_name", "policy_type", "policy_number",
+                "sum_assured", "premium_amount", "premium_frequency", "premium_term",
+                "policy_term", "payment_method", "start_date", "review_date",
+                "review_frequency", "status", "notes",
+            ],
+            "col_widths": {
+                "insurer": 20, "plan_name": 24, "policy_type": 22, "policy_number": 20,
+                "sum_assured": 18, "premium_amount": 18, "premium_frequency": 20,
+                "premium_term": 18, "policy_term": 18, "payment_method": 20,
+                "start_date": 16, "review_date": 16, "review_frequency": 20,
+                "status": 16, "notes": 36,
+            },
+            "sample_rows": [
+                [
+                    "Prudential", "PRUlife", "Whole Life", "PL-12345678",
+                    "500000", "3600", "Annual", "20",
+                    "Whole of Life", "GIRO", "2020-01-15", "2025-01-15",
+                    "Annual", "active", "",
+                ],
+                [
+                    "AIA", "Health Shield Gold", "Medical", "AIA-98765432",
+                    "", "1200", "Annual", "Lifetime",
+                    "Lifetime", "Credit Card", "2019-06-01", "2025-06-01",
+                    "Annual", "active", "",
+                ],
+            ],
+            "notes_rows": [
+                ["NOTES:"],
+                ["• policy_type: protection | savings | investment-linked | ci | medical | other"],
+                ["• premium_frequency: Annual | Monthly | Quarterly | Semi-Annual | Single-Pay"],
+                ["• status: active | lapsed | surrendered | claimed | archived"],
+                ["• start_date / review_date: YYYY-MM-DD format"],
+                ["• sum_assured and premium_amount: numbers only, no currency symbols"],
+            ],
+        },
+        # Investments dashboard template. Pre-populated with the user's
+        # existing client policies so Jovial only types into the
+        # total_premiums_paid and current_value columns each month and
+        # reuploads. policy_number is the match key — leave it alone for
+        # existing rows; for new policies, type in the real policy number.
+        "investments": {
+            "sheet_title": "Investments Update Template",
+            "filename": "investments-template.xlsx",
+            "headers": [
+                "policy_number", "client_name", "product_name",
+                "portfolio_tag", "portfolio",
+                "premium_amount", "premium_frequency", "start_date",
+                "total_premiums_paid", "current_value", "valuation_date",
+                "premium_holiday_months", "notes",
+            ],
+            "col_widths": {
+                "policy_number": 22, "client_name": 26, "product_name": 26,
+                "portfolio_tag": 20, "portfolio": 26,
+                "premium_amount": 16, "premium_frequency": 18,
+                "start_date": 14, "total_premiums_paid": 20, "current_value": 18,
+                "valuation_date": 16, "premium_holiday_months": 22, "notes": 30,
+            },
+            # No sample rows — Jovial sees only her real data, not contrived examples.
+            "sample_rows": [],
+            "notes_rows": [
+                ["NOTES:"],
+                ["• policy_number is the match key. Leave existing rows' numbers alone."],
+                ["• To add a NEW policy, fill in a blank row with all fields (including policy_number)."],
+                ["• total_premiums_paid and current_value are the fields you update each month."],
+                ["• premium_frequency: Monthly | Quarterly | Semi-Annual | Annual | Single-Pay"],
+                ["• product_name must match a product in the Manage Products list (case-insensitive)."],
+                ["• portfolio_tag: pro_adventurous | pro_balanced | pro_cautious | elite_adventurous | elite_balanced | steady | ferrari | custom"],
+                ["• When portfolio_tag is 'custom', use the portfolio column for the actual name."],
+                ["• Dates: YYYY-MM-DD format. valuation_date optional — falls back to the dashboard's Correct As Of."],
+            ],
+            # Marker — handled below to pull live data from SQLite.
+            "_prefill_from_db": True,
+        },
+    }
+
+    if name not in TEMPLATES:
+        valid = ", ".join(TEMPLATES.keys())
+        raise RelationshipOSError(
+            f"Unknown template '{name}'. Valid options: {valid}"
+        )
+
+    tmpl = TEMPLATES[name]
+    headers: List[str] = tmpl["headers"]  # type: ignore[assignment]
+    col_widths: Dict[str, int] = tmpl["col_widths"]  # type: ignore[assignment]
+    sample_rows: List[List[str]] = tmpl["sample_rows"]  # type: ignore[assignment]
+    notes_rows: List[List[str]] = tmpl["notes_rows"]  # type: ignore[assignment]
+    filename: str = tmpl["filename"]  # type: ignore[assignment]
+    sheet_title: str = tmpl["sheet_title"]  # type: ignore[assignment]
+
+    # ── Optionally prefill rows from the live database ────────────────────────
+    # For Investments, we pre-seed every existing client policy so Jovial only
+    # has to type into the columns that change each month.
+    # For Clients, we pre-seed every active (non-archived, non-trashed) contact
+    # so the downloaded file is always an accurate snapshot of the Clients
+    # dashboard. On re-import, duplicate names are skipped, so the user can
+    # safely edit and reupload.
+    prefill_rows: List[List[str]] = []
+    if tmpl.get("_prefill_from_db") and name == "investments":
+        store = get_store()
+        store.ensure()
+        contacts = {c["id"]: c for c in store.read(CONTACTS)}
+        products = {p["id"]: p for p in store.read(INVESTMENT_PRODUCTS)}
+        # Match by name as a fallback when product_id isn't set (older rows).
+        products_by_name = {
+            (p.get("name") or "").strip().lower(): p
+            for p in products.values()
+        }
+        all_policies = store.read(POLICIES)
+        # Only active policies; drop archived ones to keep the sheet tight.
+        active = [
+            p for p in all_policies
+            if (p.get("status") or "active") not in ("archived",)
+        ]
+
+        def _product_name(policy: Dict[str, str]) -> str:
+            pid = (policy.get("product_id") or "").strip()
+            if pid and pid in products:
+                return products[pid].get("name") or ""
+            # Fallback: plan_name (we stored the product name there for legacy rows).
+            return policy.get("plan_name") or ""
+
+        for p in active:
+            client = contacts.get(p.get("contact_id") or "", {})
+            prefill_rows.append([
+                p.get("policy_number") or "",
+                client.get("name") or "",
+                _product_name(p),
+                p.get("portfolio_tag") or "",
+                p.get("portfolio") or "",
+                p.get("premium_amount") or "",
+                p.get("premium_frequency") or "",
+                p.get("start_date") or "",
+                p.get("total_premiums_paid") or "",
+                p.get("current_value") or "",
+                p.get("valuation_date") or "",
+                p.get("premium_holiday_months") or "",
+                p.get("notes") or "",
+            ])
+
+    elif tmpl.get("_prefill_from_db") and name == "clients":
+        store = get_store()
+        store.ensure()
+        all_contacts = store.read(CONTACTS)
+        # Mirror the Clients dashboard: hide archived AND trashed rows.
+        active_contacts = [
+            c for c in all_contacts
+            if not (c.get("archived_at") or "").strip()
+            and not (c.get("deleted_at") or "").strip()
+        ]
+
+        # Discover every unique custom_fields key across active contacts so the
+        # download captures whatever custom data Yixun/Jovial have added in the
+        # app. Order matches first-seen insertion order for stable output.
+        def _cf_label_to_column(label: str) -> str:
+            """'Annual Income' → 'cf_annual_income'.
+
+            Inverse of the import side: cf_<col> → label uses '_' → ' '. We
+            re-lower+replace here so any label round-trips cleanly.
+            """
+            slug = (label or "").strip().lower().replace(" ", "_")
+            return f"cf_{slug}" if slug else ""
+
+        seen_cf: Dict[str, str] = {}  # original label → column key
+        for c in active_contacts:
+            try:
+                cf_obj = json.loads(c.get("custom_fields") or "{}")
+            except Exception:
+                cf_obj = {}
+            if isinstance(cf_obj, dict):
+                for label in cf_obj.keys():
+                    col_key = _cf_label_to_column(label)
+                    if col_key and label not in seen_cf:
+                        seen_cf[label] = col_key
+
+        # Rebuild headers: keep all non-cf base columns, then append the
+        # discovered cf_ columns. If no custom fields exist yet, fall back to
+        # the static cf_annual_income / cf_risk_appetite columns so the file
+        # still shows the convention.
+        base_headers = [h for h in headers if not h.startswith("cf_")]
+        if seen_cf:
+            cf_columns = list(seen_cf.values())
+        else:
+            cf_columns = [h for h in headers if h.startswith("cf_")]
+        headers = base_headers + cf_columns
+        # Ensure every dynamic cf_ column has a sensible width.
+        for cf_col in cf_columns:
+            col_widths.setdefault(cf_col, 22)
+
+        # Build one row per active contact, in dashboard order.
+        for c in active_contacts:
+            try:
+                cf_obj = json.loads(c.get("custom_fields") or "{}")
+            except Exception:
+                cf_obj = {}
+            if not isinstance(cf_obj, dict):
+                cf_obj = {}
+            row: List[str] = []
+            for h in headers:
+                if h.startswith("cf_"):
+                    # Find the original label whose column slug equals h.
+                    val = ""
+                    for orig_label, col_key in seen_cf.items():
+                        if col_key == h:
+                            val = str(cf_obj.get(orig_label, "") or "")
+                            break
+                    row.append(val)
+                else:
+                    row.append(str(c.get(h) or ""))
+            prefill_rows.append(row)
+
+        # When we have real client rows, drop the Jane/David sample so the
+        # download is a clean snapshot. If the user has zero clients, keep the
+        # sample rows as a "this is how to fill it in" example.
+        if active_contacts:
+            sample_rows = []
+
+    # ── Build xlsx and write to vault/Downloads/ ──────────────────────────────
+
+    xlsx_bytes = _build_xlsx_stdlib(
+        sheet_title=sheet_title,
+        headers=headers,
+        col_widths=col_widths,
+        sample_rows=sample_rows,
+        notes_rows=notes_rows,
+        prefill_rows=prefill_rows,
+    )
+
+    downloads_dir = ROOT / "vault" / "Downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    dest = downloads_dir / filename
+    dest.write_bytes(xlsx_bytes)
+
+    return {
+        "ok": True,
+        "path": str(dest),
+        "filename": filename,
+        "template": name,
+        "message": f"Template saved to {dest}",
     }
 
 
@@ -5335,6 +7811,14 @@ def build_parser() -> argparse.ArgumentParser:
     prep_p.add_argument("--name", required=True)
     prep_p.set_defaults(func=cmd_prep)
 
+    send_brief_p = sub.add_parser(
+        "send-client-brief",
+        help="Build a pre-meeting brief for a contact and send it to Telegram.",
+    )
+    send_brief_p.add_argument("--id", dest="contact_id", help="Contact ID (preferred).")
+    send_brief_p.add_argument("--name", help="Contact name (alternative to --id).")
+    send_brief_p.set_defaults(func=cmd_send_client_brief)
+
     export_p = sub.add_parser("export-md", aliases=["export-markdown", "markdown-export"], help="Export store tabs to an Obsidian-style Markdown vault")
     export_p.add_argument("--output-dir", help="Vault output directory; defaults to RELATIONSHIP_OS_VAULT_DIR or Settings.vault_dir")
     export_p.add_argument("--dry-run", action="store_true", help="Preview output paths without writing files")
@@ -5359,6 +7843,16 @@ def build_parser() -> argparse.ArgumentParser:
     proposal_p.add_argument("--output-dir", help="Vault output directory")
     proposal_p.add_argument("--dry-run", action="store_true", help="Preview output paths without writing files")
     proposal_p.set_defaults(func=cmd_proposal)
+
+    policy_summary_p = sub.add_parser(
+        "policy-summary",
+        aliases=["policy_summary"],
+        help="Generate a structured policy summary for a client",
+    )
+    policy_summary_p.add_argument("--name", required=True, help="Contact name")
+    policy_summary_p.add_argument("--output-dir", help="Vault output directory")
+    policy_summary_p.add_argument("--dry-run", action="store_true", help="Preview output paths without writing files")
+    policy_summary_p.set_defaults(func=cmd_policy_summary)
 
     slides_p = sub.add_parser(
         "slides",
@@ -5557,7 +8051,88 @@ def build_parser() -> argparse.ArgumentParser:
     archive_pol_p.add_argument("--id", dest="policy_id", required=True, help="Policy ID.")
     archive_pol_p.set_defaults(func=cmd_archive_policy)
 
+    discard_pol_p = sub.add_parser(
+        "discard-policy",
+        help="Move a policy to Trash (sets deleted_at). Restorable from the Trash page.",
+    )
+    discard_pol_p.add_argument("--id", dest="policy_id", required=True, help="Policy ID.")
+    discard_pol_p.set_defaults(func=cmd_discard_policy)
+
+    restore_pol_p = sub.add_parser(
+        "restore-policy",
+        help="Restore a trashed policy (clears deleted_at).",
+    )
+    restore_pol_p.add_argument("--id", dest="policy_id", required=True, help="Policy ID.")
+    restore_pol_p.set_defaults(func=cmd_restore_policy)
+
+    purge_pol_p = sub.add_parser(
+        "purge-policy",
+        help="Permanently delete a policy row. Cannot be undone.",
+    )
+    purge_pol_p.add_argument("--id", dest="policy_id", required=True, help="Policy ID.")
+    purge_pol_p.set_defaults(func=cmd_purge_policy)
+
+    # ── Investment products (catalog) ────────────────────────────────────────
+    list_prod_p = sub.add_parser(
+        "list-products",
+        help="List investment products. Default: active only.",
+    )
+    list_prod_p.add_argument(
+        "--include-archived",
+        action="store_true",
+        help="Include archived products.",
+    )
+    list_prod_p.set_defaults(func=cmd_list_products)
+
+    add_prod_p = sub.add_parser(
+        "add-product",
+        help="Add a new investment product to the catalog.",
+    )
+    add_prod_p.add_argument("--name", help="Product name (required).")
+    add_prod_p.add_argument("--premium-term", dest="premium_term", help="Premium term (e.g. '10 years', '20').")
+    add_prod_p.add_argument("--lock-in-period", dest="lock_in_period", help="Lock-in period (e.g. '5 years').")
+    add_prod_p.add_argument("--notes", help="Free-text notes.")
+    add_prod_p.add_argument("--json", help="JSON payload with fields. Use '-' to read from stdin.")
+    add_prod_p.add_argument("--json-file", dest="json_file", help="Path to JSON file with fields.")
+    add_prod_p.set_defaults(func=cmd_add_product)
+
+    upd_prod_p = sub.add_parser(
+        "update-product",
+        help="Update fields on an existing investment product.",
+    )
+    upd_prod_p.add_argument("--id", dest="product_id", help="Product ID (required unless in JSON payload).")
+    upd_prod_p.add_argument("--name", help="Product name.")
+    upd_prod_p.add_argument("--premium-term", dest="premium_term", help="Premium term.")
+    upd_prod_p.add_argument("--lock-in-period", dest="lock_in_period", help="Lock-in period.")
+    upd_prod_p.add_argument("--notes", help="Free-text notes.")
+    upd_prod_p.add_argument("--json", help="JSON payload with fields. Use '-' to read from stdin.")
+    upd_prod_p.add_argument("--json-file", dest="json_file", help="Path to JSON file with fields.")
+    upd_prod_p.set_defaults(func=cmd_update_product)
+
+    arch_prod_p = sub.add_parser(
+        "archive-product",
+        help="Soft-delete a product. Existing policies of this product are not affected.",
+    )
+    arch_prod_p.add_argument("--id", dest="product_id", required=True, help="Product ID.")
+    arch_prod_p.set_defaults(func=cmd_archive_product)
+
     # Contact maintenance: archive (soft-delete), unarchive, rename.
+    create_c_p = sub.add_parser(
+        "create-contact",
+        aliases=["create_contact"],
+        help="Create a new contact record without requiring a touchpoint.",
+    )
+    create_c_p.add_argument("--name", required=True, help="Contact full name.")
+    create_c_p.add_argument("--type", dest="contact_type", default="prospect",
+                            help="client / prospect / candidate / advisor / other (default: prospect)")
+    create_c_p.add_argument("--stage", dest="relationship_stage", default="warming",
+                            help="cold / warming / warm / hot / client / inactive (default: warming)")
+    create_c_p.add_argument("--phone", default="", help="Phone number.")
+    create_c_p.add_argument("--email", default="", help="Email address.")
+    create_c_p.add_argument("--occupation", default="", help="Occupation.")
+    create_c_p.add_argument("--company", default="", help="Company.")
+    create_c_p.set_defaults(func=cmd_create_contact)
+
     archive_c_p = sub.add_parser(
         "archive-contact",
         help="Soft-delete a contact (sets archived_at). Hidden from default app lists.",
@@ -5574,6 +8149,75 @@ def build_parser() -> argparse.ArgumentParser:
     unarchive_c_p.add_argument("--name", help="Contact name (alternative to --id).")
     unarchive_c_p.set_defaults(func=cmd_unarchive_contact)
 
+    delete_c_p = sub.add_parser(
+        "delete-contact",
+        help="Soft-delete (trash) a contact. Recoverable from the Trash page.",
+    )
+    delete_c_p.add_argument("--id", dest="contact_id", help="Contact ID (preferred).")
+    delete_c_p.add_argument("--name", help="Contact name (alternative to --id).")
+    delete_c_p.set_defaults(func=cmd_delete_contact)
+
+    restore_c_p = sub.add_parser(
+        "restore-contact",
+        help="Restore a trashed contact back to the active list.",
+    )
+    restore_c_p.add_argument("--id", dest="contact_id", help="Contact ID (preferred).")
+    restore_c_p.add_argument("--name", help="Contact name (alternative to --id).")
+    restore_c_p.set_defaults(func=cmd_restore_contact)
+
+    purge_c_p = sub.add_parser(
+        "purge-contact",
+        help="Permanently delete a trashed contact and all linked data. Cannot be undone.",
+    )
+    purge_c_p.add_argument("--id", dest="contact_id", help="Contact ID (preferred).")
+    purge_c_p.add_argument("--name", help="Contact name (alternative to --id).")
+    purge_c_p.set_defaults(func=cmd_purge_contact)
+
+    bulk_pol_p = sub.add_parser(
+        "bulk-import-policies",
+        help="Import multiple policies from a CSV file for a given contact.",
+    )
+    bulk_pol_p.add_argument("--id", dest="contact_id", help="Contact ID (preferred).")
+    bulk_pol_p.add_argument("--name", help="Contact name (alternative to --id).")
+    bulk_pol_p.add_argument("--file", required=True, help="Path to the CSV file.")
+    bulk_pol_p.set_defaults(func=cmd_bulk_import_policies)
+
+    bulk_con_p = sub.add_parser(
+        "bulk-import-contacts",
+        help="Import multiple contacts from a CSV file.",
+    )
+    bulk_con_p.add_argument("--file", required=True, help="Path to the CSV file.")
+    bulk_con_p.set_defaults(func=cmd_bulk_import_contacts)
+
+    bulk_inv_p = sub.add_parser(
+        "bulk-upsert-investments",
+        help="Upsert investment policies from the Investments dashboard template.",
+    )
+    bulk_inv_p.add_argument("--file", required=True, help="Path to the xlsx or CSV file.")
+    bulk_inv_p.add_argument(
+        "--as-of",
+        dest="as_of",
+        default="",
+        help="YYYY-MM-DD date for this snapshot. Updates Correct As Of and backfills valuation_date.",
+    )
+    bulk_inv_p.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Classify every row (update / create / needs_decision / error) without writing.",
+    )
+    bulk_inv_p.add_argument(
+        "--name-resolution",
+        dest="name_resolution",
+        default="",
+        help=(
+            "JSON object mapping a sheet client_name to a contact_id "
+            "(or the literal '__skip__'). Used in the apply pass after the "
+            "UI confirms fuzzy matches."
+        ),
+    )
+    bulk_inv_p.set_defaults(func=cmd_bulk_upsert_investments)
+
     rename_c_p = sub.add_parser(
         "rename-contact",
         help="Rename a contact + cascade contact_name to touchpoints and reminders.",
@@ -5585,6 +8229,18 @@ def build_parser() -> argparse.ArgumentParser:
     demo_p = sub.add_parser("demo", help="Populate demo data")
     demo_p.add_argument("--reset", action="store_true")
     demo_p.set_defaults(func=cmd_demo)
+
+    gen_tmpl_p = sub.add_parser(
+        "generate-template",
+        help="Generate a styled Excel (.xlsx) import template in vault/Downloads/.",
+    )
+    gen_tmpl_p.add_argument(
+        "--name",
+        required=True,
+        choices=["clients", "policies", "investments"],
+        help="Which template to generate: clients, policies, or investments.",
+    )
+    gen_tmpl_p.set_defaults(func=cmd_generate_template)
 
     return parser
 

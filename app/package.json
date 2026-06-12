@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "build:app": "tauri build --bundles app",
     "build:dmg": "bash scripts/build-dmg.sh",
-    "open:built": "open src-tauri/target/release/bundle/macos/AWMOS.app",
+    "open:built": "open src-tauri/target/release/bundle/macos/Cronos.app",
     "install:local": "npm run build:app && bash scripts/install-local-app.sh",
     "audit": "npm audit --audit-level=moderate",
     "preview": "vite preview",

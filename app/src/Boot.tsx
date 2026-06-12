@@ -7,6 +7,7 @@ import { FirstRunRoute } from "@/routes/first-run";
 import { tryResolveKitRoot } from "@/lib/kit-root";
 import { applyScheme, getStoredScheme } from "@/lib/theme";
 import { resetDbConnection } from "@/lib/db";
+import { runMigrations } from "@/lib/migrations";
 
 type BootState =
   | { phase: "checking" }
@@ -30,6 +31,7 @@ export function Boot() {
         setState({ phase: "needs-picker" });
         return;
       }
+      await runMigrations();
       setState({ phase: "ready" });
     }
     run();
@@ -38,9 +40,11 @@ export function Boot() {
     };
   }, []);
 
-  function handleFirstRunResolved() {
-    // Reset the DB singleton so it picks up the new path, then enter app.
+  async function handleFirstRunResolved() {
+    // Reset the DB singleton so it picks up the new path, run any pending
+    // migrations (e.g. journal_entries), then enter the app.
     resetDbConnection();
+    await runMigrations();
     setState({ phase: "ready" });
   }
 

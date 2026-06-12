@@ -3,11 +3,10 @@
 // must use the exact same strings.
 
 export const CONTACT_TYPES = [
+  "cold",
+  "warming",
+  "in_conversation",
   "client",
-  "prospect",
-  "candidate",
-  "advisor",
-  "other",
 ] as const;
 export type ContactType = (typeof CONTACT_TYPES)[number];
 
@@ -22,30 +21,34 @@ export const RELATIONSHIP_STAGES = [
 export type RelationshipStage = (typeof RELATIONSHIP_STAGES)[number];
 
 export const TOUCHPOINT_TYPES = [
-  "meeting",
-  "call",
-  "coffee",
-  "lunch",
-  "event",
-  "message",
-  "referral",
-  "other",
+  "casual_message",
+  "non_business_meeting",
+  "business_meeting",
+  "claim_pos_request",
+  "client_event",
   "import",
 ] as const;
 export type TouchpointType = (typeof TOUCHPOINT_TYPES)[number];
+
+// Human-readable labels for each touchpoint type.
+export const TOUCHPOINT_TYPE_LABEL: Record<TouchpointType, string> = {
+  casual_message: "Casual Message",
+  non_business_meeting: "Non Business Meeting",
+  business_meeting: "Business Meeting",
+  claim_pos_request: "Claim/POS Request",
+  client_event: "Client Event",
+  import: "Import",
+};
 
 // Subset of TOUCHPOINT_TYPES that represent real consultant-client
 // interactions. Mirrors REAL_INTERACTION_TOUCHPOINT_TYPES in the Python kit.
 // Only these update last_touch_date and feed the "needs attention" math.
 export const REAL_INTERACTION_TOUCHPOINT_TYPES: readonly TouchpointType[] = [
-  "meeting",
-  "call",
-  "coffee",
-  "lunch",
-  "event",
-  "message",
-  "referral",
-  "other",
+  "casual_message",
+  "non_business_meeting",
+  "business_meeting",
+  "claim_pos_request",
+  "client_event",
 ];
 
 export const SENTIMENTS = ["positive", "neutral", "negative", "mixed"] as const;
@@ -89,6 +92,10 @@ export const EVENT_KINDS = [
   "policy_created",
   "policy_updated",
   "policy_archived",
+  // Trash lifecycle for policies, parallel to contact_archived/etc.
+  "policy_discarded",
+  "policy_restored",
+  "policy_purged",
   "clarification_queued",
   "clarification_resolved",
   "relationship_created",

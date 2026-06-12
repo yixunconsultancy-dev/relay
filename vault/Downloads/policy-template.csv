@@ -1,0 +1,3 @@
+"insurer","plan_name","policy_type","policy_number","sum_assured","premium_amount","premium_frequency","premium_term","policy_term","payment_method","start_date","review_date","review_frequency","status","notes"
+"Prudential","PRUlife","Whole Life","PL-12345678","500000","3600","Annual","20","Whole of Life","GIRO","2020-01-15","2025-01-15","Annual","active",""
+"AIA","Health Shield Gold","Medical","AIA-98765432","","1200","Annual","Lifetime","Lifetime","Credit Card","2019-06-01","2025-06-01","Annual","active",""

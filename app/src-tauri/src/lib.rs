@@ -478,6 +478,44 @@ fn reveal_generated_document(path: String, state: State<KitRootState>) -> Result
     }
 }
 
+/// Reveal one or more files simultaneously in Finder using osascript.
+/// All paths must be absolute. Non-existent paths are silently skipped.
+#[tauri::command]
+fn reveal_files_in_finder(paths: Vec<String>) -> Result<(), String> {
+    let existing: Vec<String> = paths
+        .into_iter()
+        .filter(|p| std::path::Path::new(p).exists())
+        .collect();
+    if existing.is_empty() {
+        return Ok(());
+    }
+    // Build an AppleScript POSIX file list: {POSIX file "…", POSIX file "…"}
+    let file_list = existing
+        .iter()
+        .map(|p| format!("POSIX file \"{}\"", p.replace('"', "\\\"")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let script = format!(
+        "tell application \"Finder\"\nreveal {{{}}}\nactivate\nend tell",
+        file_list
+    );
+    Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .status()
+        .map_err(|e| format!("failed to run osascript: {e}"))?;
+    Ok(())
+}
+
+/// Delete a single file from vault/Generated/.
+#[tauri::command]
+fn delete_generated_document(path: String, state: State<KitRootState>) -> Result<(), String> {
+    let target = resolve_generated_document_path(&state, &path)?;
+    std::fs::remove_file(&target)
+        .map_err(|e| format!("failed to delete document: {e}"))?;
+    Ok(())
+}
+
 /// Shared path-resolution + sandbox check for the document open/reveal commands.
 fn resolve_generated_document_path(
     state: &State<KitRootState>,
@@ -499,6 +537,205 @@ fn resolve_generated_document_path(
         return Err("generated document is not a file".to_string());
     }
     Ok(target)
+}
+
+/// Copy a user-picked file into vault/client_documents/{contact_id}/.
+/// Returns the destination absolute path.
+#[tauri::command]
+fn import_contact_document(
+    src_path: String,
+    contact_id: String,
+    filename: String,
+    state: State<KitRootState>,
+) -> Result<String, String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let dest_dir = root.join("vault").join("client_documents").join(&contact_id);
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("failed to create document directory: {e}"))?;
+    let dest = dest_dir.join(&filename);
+    std::fs::copy(&src_path, &dest)
+        .map_err(|e| format!("failed to copy file: {e}"))?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Delete a file that lives inside vault/client_documents/.
+#[tauri::command]
+fn delete_contact_document(path: String, state: State<KitRootState>) -> Result<(), String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let allowed_root = root.join("vault").join("client_documents");
+    let target = PathBuf::from(&path);
+    // Best-effort canonicalize; if the file is gone skip the check.
+    let canonical_target = target.canonicalize().unwrap_or_else(|_| target.clone());
+    let canonical_root = allowed_root.canonicalize().unwrap_or(allowed_root);
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err("refusing to delete a file outside vault/client_documents".to_string());
+    }
+    std::fs::remove_file(&target).map_err(|e| format!("failed to delete file: {e}"))?;
+    Ok(())
+}
+
+/// Open a contact document with the default macOS application.
+#[tauri::command]
+fn open_contact_document(path: String, state: State<KitRootState>) -> Result<(), String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let allowed_root = root.join("vault").join("client_documents");
+    let target = PathBuf::from(&path);
+    let canonical_target = target
+        .canonicalize()
+        .map_err(|e| format!("could not resolve path: {e}"))?;
+    let canonical_root = allowed_root.canonicalize().unwrap_or(allowed_root);
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err("refusing to open a file outside vault/client_documents".to_string());
+    }
+    Command::new("open")
+        .arg(&canonical_target)
+        .status()
+        .map_err(|e| format!("failed to open file: {e}"))?;
+    Ok(())
+}
+
+/// Reveal a contact document in Finder.
+#[tauri::command]
+fn reveal_contact_document(path: String, state: State<KitRootState>) -> Result<(), String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let allowed_root = root.join("vault").join("client_documents");
+    let target = PathBuf::from(&path);
+    let canonical_target = target.canonicalize().unwrap_or_else(|_| target.clone());
+    let canonical_root = allowed_root.canonicalize().unwrap_or(allowed_root);
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err("refusing to reveal a file outside vault/client_documents".to_string());
+    }
+    Command::new("open")
+        .arg("-R")
+        .arg(&canonical_target)
+        .status()
+        .map_err(|e| format!("failed to reveal file: {e}"))?;
+    Ok(())
+}
+
+/// Delete a contact's entire document folder from vault/client_documents/.
+/// Called by purge-contact to clean up uploaded docs.
+#[tauri::command]
+fn purge_contact_documents(contact_id: String, state: State<KitRootState>) -> Result<(), String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let folder = root.join("vault").join("client_documents").join(&contact_id);
+    if folder.exists() {
+        std::fs::remove_dir_all(&folder)
+            .map_err(|e| format!("failed to remove document folder: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Open any file that lives inside the kit's vault/ directory.
+/// Used to open Python-generated Excel templates in vault/Downloads/.
+#[tauri::command]
+fn open_vault_file(path: String, state: State<KitRootState>) -> Result<(), String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let vault_root = root.join("vault");
+    let target = PathBuf::from(&path);
+
+    // Best-effort canonicalize; if the file was just created it should resolve.
+    let canonical_target = target
+        .canonicalize()
+        .map_err(|e| format!("could not resolve path '{}': {e}", path))?;
+    let canonical_vault = vault_root
+        .canonicalize()
+        .unwrap_or(vault_root);
+
+    if !canonical_target.starts_with(&canonical_vault) {
+        return Err("refusing to open a file outside vault/".to_string());
+    }
+    if !canonical_target.is_file() {
+        return Err(format!("'{}' is not a file", canonical_target.display()));
+    }
+
+    let status = Command::new("open")
+        .arg(&canonical_target)
+        .status()
+        .map_err(|e| format!("failed to launch macOS open: {e}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("macOS open exited with status {status}"))
+    }
+}
+
+/// Write CSV content to vault/Downloads/<filename> and open it with the
+/// default macOS application (usually Numbers or Excel). The Downloads folder
+/// is created if it doesn't exist. Returns the absolute path of the saved file.
+#[tauri::command]
+fn save_csv_template(
+    filename: String,
+    content: String,
+    state: State<KitRootState>,
+) -> Result<String, String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let downloads_dir = root.join("vault").join("Downloads");
+    std::fs::create_dir_all(&downloads_dir)
+        .map_err(|e| format!("failed to create Downloads folder: {e}"))?;
+    let dest = downloads_dir.join(&filename);
+    std::fs::write(&dest, content.as_bytes())
+        .map_err(|e| format!("failed to write CSV file: {e}"))?;
+    let path_str = dest.to_string_lossy().into_owned();
+    Command::new("open")
+        .arg(&dest)
+        .status()
+        .map_err(|e| format!("failed to open CSV file: {e}"))?;
+    Ok(path_str)
+}
+
+/// Delete all generated documents (vault/Generated/{kind}/) whose filename
+/// slug matches the given contact slug.
+///
+/// Generated filenames have the form `YYYY-MM-DD <slug>[-purpose].ext`.
+/// A file belongs to the contact if the parsed slug equals the contact slug
+/// exactly OR starts with `<contact_slug>-`.
+#[tauri::command]
+fn purge_contact_generated_documents(
+    contact_slug: String,
+    state: State<KitRootState>,
+) -> Result<u32, String> {
+    let root = resolve_kit_root_impl(&state)?;
+    let generated = root.join("vault").join("Generated");
+    if !generated.exists() {
+        return Ok(0);
+    }
+    let kinds = ["appointment_summary", "proposal", "slides", "writeup", "policy_summary"];
+    let mut deleted: u32 = 0;
+    for kind in kinds {
+        let dir = generated.join(kind);
+        if !dir.exists() {
+            continue;
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(it) => it,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(f) => f.to_string(),
+                None => continue,
+            };
+            if filename.starts_with('.') {
+                continue;
+            }
+            let (_date, doc_slug) = parse_generated_filename(&filename);
+            let belongs = doc_slug.as_deref().map(|s| {
+                s == contact_slug.as_str() || s.starts_with(&format!("{}-", contact_slug))
+            }).unwrap_or(false);
+            if belongs {
+                if std::fs::remove_file(&path).is_ok() {
+                    deleted += 1;
+                }
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 fn format_unix_secs(secs: u64) -> String {
@@ -777,7 +1014,17 @@ pub fn run() {
             run_kit_command,
             list_generated_documents,
             open_generated_document,
-            reveal_generated_document
+            reveal_generated_document,
+            delete_generated_document,
+            reveal_files_in_finder,
+            import_contact_document,
+            delete_contact_document,
+            open_contact_document,
+            reveal_contact_document,
+            purge_contact_documents,
+            purge_contact_generated_documents,
+            save_csv_template,
+            open_vault_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

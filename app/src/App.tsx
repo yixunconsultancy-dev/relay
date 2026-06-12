@@ -14,6 +14,11 @@ import { ActivityRoute } from "@/routes/activity";
 import { DebtRoute } from "@/routes/debt";
 import { ClarificationsRoute } from "@/routes/clarifications";
 import { GraphRoute } from "@/routes/graph";
+import { InvestmentsRoute } from "@/routes/investments";
+import { PolicyDetailRoute } from "@/routes/policy-detail";
+import { ShowcaseRoute } from "@/routes/showcase";
+import { JournalRoute } from "@/routes/journal";
+import { TrashRoute } from "@/routes/trash";
 import { useEventPoller } from "@/lib/polling";
 import { useSyncStatus } from "@/lib/sync-status";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -58,6 +63,11 @@ export default function App() {
               <Route path="/debt" element={<DebtRoute />} />
               <Route path="/clarifications" element={<ClarificationsRoute />} />
               <Route path="/graph" element={<GraphRoute />} />
+              <Route path="/investments" element={<InvestmentsRoute />} />
+              <Route path="/policies/:policyId" element={<PolicyDetailRoute />} />
+              <Route path="/showcase" element={<ShowcaseRoute />} />
+              <Route path="/journal" element={<JournalRoute />} />
+              <Route path="/trash" element={<TrashRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
             </Routes>
           </ErrorBoundary>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="AWMOS.app"
+APP_NAME="Cronos.app"
 BUNDLE_ID="com.awm.relationshipos"
 APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_APP="$APP_ROOT/src-tauri/target/release/bundle/macos/$APP_NAME"
@@ -16,7 +16,7 @@ if [[ ! -d "$SOURCE_APP" ]]; then
   exit 1
 fi
 
-echo "Quitting any running AWMOS instance..."
+echo "Quitting any running Cronos instance..."
 osascript -e "quit app id \"$BUNDLE_ID\"" >/dev/null 2>&1 || true
 sleep 1
 

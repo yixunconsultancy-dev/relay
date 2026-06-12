@@ -8,6 +8,11 @@ import {
   Plus,
   Sparkles,
   Sun,
+  Users,
+  TrendingUp,
+  BadgeDollarSign,
+  Shield,
+  HandCoins,
 } from "lucide-react";
 
 import {
@@ -21,6 +26,7 @@ import { QuickLogDialog } from "@/components/quick-log-dialog";
 import {
   useAllReminders,
   useAllTouchpoints,
+  useAllPolicies,
   useContacts,
   useSettings,
 } from "@/lib/queries";
@@ -33,6 +39,7 @@ import {
 import { computeRipeSignals } from "@/lib/ripe";
 import { upcomingBirthdays } from "@/lib/birthdays";
 import { getDb } from "@/lib/db";
+import { getQuoteOfTheDay } from "@/lib/quotes";
 import type { TouchpointRow } from "@/lib/schema";
 import {
   formatShortDate,
@@ -41,23 +48,28 @@ import {
   todayIso,
 } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  ReminderPriority,
-  Sentiment,
+import {
+  TOUCHPOINT_TYPE_LABEL,
+  type ReminderPriority,
+  type Sentiment,
+  type TouchpointType,
 } from "@/lib/enums";
 
-async function fetchTouchpointsForDate(date: string): Promise<TouchpointRow[]> {
+async function fetchRecentTouchpoints(since: string): Promise<TouchpointRow[]> {
   const db = await getDb();
-  // Exclude `import` touchpoints — those are bulk-import rows, not real
-  // consultant-client interactions, and shouldn't show up on the Today
-  // dashboard.
   return db.select<TouchpointRow[]>(
     `SELECT "id","contact_id","contact_name","date","type","sentiment","summary","topics","action_items","meeting_number","raw_input","notes","created_at"
        FROM touchpoints
-      WHERE date = $1 AND type <> 'import'
-      ORDER BY created_at DESC`,
-    [date]
+      WHERE date >= $1 AND type <> 'import'
+      ORDER BY date DESC, created_at DESC`,
+    [since]
   );
+}
+
+function subtractDays(isoDate: string, days: number): string {
+  const d = new Date(isoDate + "T00:00:00");
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 function greetingFor(hour: number): string {
@@ -67,16 +79,38 @@ function greetingFor(hour: number): string {
   return "Good evening";
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function annualise(amount: string, frequency: string): number {
+  const n = parseFloat(amount) || 0;
+  const f = (frequency || "").toLowerCase();
+  if (f.includes("month")) return n * 12;
+  if (f.includes("quarter")) return n * 4;
+  if (f.includes("half") || f.includes("semi")) return n * 2;
+  return n; // annual / yearly / blank → as-is
+}
+
+function fmtMoney(n: number): string {
+  if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
+  if (n >= 1_000) return "$" + (n / 1_000).toFixed(0) + "K";
+  return "$" + n.toLocaleString();
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function HomeRoute() {
   const reminders = useAllReminders();
   const contacts = useContacts();
   const touchpoints = useAllTouchpoints();
+  const policies = useAllPolicies();
   const settings = useSettings();
   const today = todayIso(settings.data?.timezone);
-  const todaysTouchpoints = useQuery({
-    queryKey: ["touchpoints", "today", today],
-    queryFn: () => fetchTouchpointsForDate(today),
+  const threeDaysAgo = subtractDays(today, 2); // today + 2 prior days = 3 days
+  const recentTouchpoints = useQuery({
+    queryKey: ["touchpoints", "recent", threeDaysAgo],
+    queryFn: () => fetchRecentTouchpoints(threeDaysAgo),
   });
+  const quote = getQuoteOfTheDay(today);
   const queryClient = useQueryClient();
 
   const [quickOpen, setQuickOpen] = useState(false);
@@ -120,6 +154,34 @@ export function HomeRoute() {
     return upcomingBirthdays(contacts.data, new Date());
   }, [contacts.data]);
 
+  const kpis = useMemo(() => {
+    const allContacts = contacts.data ?? [];
+    const allPolicies = policies.data ?? [];
+    const active = allPolicies.filter((p) => (p.status || "active") === "active");
+
+    const totalAum = active.reduce((sum, p) => {
+      const val = parseFloat(p.current_value || p.sum_assured || "0") || 0;
+      return sum + val;
+    }, 0);
+
+    const totalPremium = active.reduce((sum, p) => {
+      return sum + annualise(p.premium_amount, p.premium_frequency);
+    }, 0);
+
+    const claimed = allPolicies.filter((p) => p.status === "claimed");
+    const totalSumAssured = active.reduce((sum, p) => {
+      return sum + (parseFloat(p.sum_assured || "0") || 0);
+    }, 0);
+    const totalClaimsPaid = claimed.reduce((sum, p) => {
+      return sum + (parseFloat(p.current_value || p.sum_assured || "0") || 0);
+    }, 0);
+
+    const clientCount = allContacts.filter((c) => c.type === "client").length;
+    const prospectCount = allContacts.filter((c) => c.type === "prospect").length;
+
+    return { totalAum, totalPremium, totalSumAssured, totalClaimsPaid, clientCount, prospectCount };
+  }, [contacts.data, policies.data]);
+
   const completeMutation = useMutation({
     mutationFn: (id: string) => completeReminder(id),
     onSuccess: () => {
@@ -157,6 +219,84 @@ export function HomeRoute() {
       </header>
 
       <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+
+        {/* ── KPI Row 1: Financial totals ── */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Total AUM */}
+          <div className="rounded-sm border border-border bg-bg-surface p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="awm-label">Total AUM</span>
+              <TrendingUp className="h-4 w-4 text-gold opacity-60" />
+            </div>
+            <span className="text-4xl font-display font-light text-fg leading-none">
+              {kpis.totalAum > 0 ? fmtMoney(kpis.totalAum) : "—"}
+            </span>
+            <span className="text-xs text-fg-muted">Assets under management · active policies</span>
+          </div>
+
+          {/* Ann. Premium */}
+          <div className="rounded-sm border border-border bg-bg-surface p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="awm-label">Ann. Premium</span>
+              <BadgeDollarSign className="h-4 w-4 text-gold opacity-60" />
+            </div>
+            <span className="text-4xl font-display font-light text-fg leading-none">
+              {kpis.totalPremium > 0 ? fmtMoney(kpis.totalPremium) : "—"}
+            </span>
+            <span className="text-xs text-fg-muted">In-force annual premium</span>
+          </div>
+        </div>
+
+        {/* ── KPI Row 2: Client & coverage stats ── */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* Total Clients */}
+          <div className="rounded-sm border border-border bg-bg-surface p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="awm-label">Total Clients</span>
+              <Users className="h-4 w-4 text-gold opacity-60" />
+            </div>
+            <span className="text-3xl font-display font-light text-fg leading-none">
+              {kpis.clientCount}
+            </span>
+            <span className="text-xs text-fg-muted">
+              {kpis.prospectCount} prospect{kpis.prospectCount !== 1 ? "s" : ""} in pipeline
+            </span>
+          </div>
+
+          {/* Total Sum Assured */}
+          <div className="rounded-sm border border-border bg-bg-surface p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="awm-label">Total Sum Assured</span>
+              <Shield className="h-4 w-4 text-gold opacity-60" />
+            </div>
+            <span className="text-3xl font-display font-light text-fg leading-none">
+              {kpis.totalSumAssured > 0 ? fmtMoney(kpis.totalSumAssured) : "—"}
+            </span>
+            <span className="text-xs text-fg-muted">Total coverage across active policies</span>
+          </div>
+
+          {/* Total Claims Paid */}
+          <div className="rounded-sm border border-border bg-bg-surface p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="awm-label">Total Claims Paid</span>
+              <HandCoins className="h-4 w-4 text-gold opacity-60" />
+            </div>
+            <span className="text-3xl font-display font-light text-fg leading-none">
+              {kpis.totalClaimsPaid > 0 ? fmtMoney(kpis.totalClaimsPaid) : "—"}
+            </span>
+            <span className="text-xs text-fg-muted">Sum across claimed policies</span>
+          </div>
+        </div>
+
+        {/* ── Quote of the Day ── */}
+        <div className="rounded-sm border border-border bg-bg-surface px-6 py-5">
+          <p className="awm-label mb-3">Quote of the Day</p>
+          <p className="font-serif text-lg font-light text-fg leading-relaxed italic">
+            "{quote.text}"
+          </p>
+          <p className="mt-2 text-xs text-fg-muted">— {quote.author}</p>
+        </div>
+
         <GardenCard today={today} />
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -226,7 +366,7 @@ export function HomeRoute() {
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="awm-label inline-flex items-center gap-1.5">
               <AlertTriangle className="h-3 w-3" />
-              Relationship debt
+              At Risk
             </h2>
             {debt.length > debtPreview.length && (
               <Link
@@ -383,16 +523,16 @@ export function HomeRoute() {
         </section>
 
         <section className="xl:col-span-2">
-          <h2 className="awm-label mb-3">Today's logged touchpoints</h2>
-          {todaysTouchpoints.isPending ? (
+          <h2 className="awm-label mb-3">Logged touchpoints · last 3 days</h2>
+          {recentTouchpoints.isPending ? (
             <p className="text-sm text-fg-muted">Loading…</p>
-          ) : (todaysTouchpoints.data?.length ?? 0) === 0 ? (
+          ) : (recentTouchpoints.data?.length ?? 0) === 0 ? (
             <p className="rounded-sm border border-border bg-bg-surface p-4 text-sm text-fg-muted italic">
-              Nothing logged yet today.
+              No touchpoints logged in the last 3 days.
             </p>
           ) : (
             <ul className="space-y-2">
-              {todaysTouchpoints.data!.map((t) => (
+              {recentTouchpoints.data!.map((t) => (
                 <li
                   key={t.id}
                   className="rounded-sm border border-border bg-bg-surface p-3"
@@ -405,7 +545,7 @@ export function HomeRoute() {
                       {t.contact_name}
                     </Link>
                     {t.type && (
-                      <Badge tone="neutral">{humanize(t.type)}</Badge>
+                      <Badge tone="neutral">{TOUCHPOINT_TYPE_LABEL[t.type as TouchpointType] ?? humanize(t.type)}</Badge>
                     )}
                     {t.sentiment && (
                       <Badge tone={SENTIMENT_TONE[t.sentiment as Sentiment]}>

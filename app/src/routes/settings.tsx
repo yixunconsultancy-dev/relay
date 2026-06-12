@@ -73,7 +73,7 @@ function formatEventSourceLabel(source: string): string {
     "app:edit-contact": "Contact edited (app)",
     "app:daily-focus": "Daily focus saved",
     "app:settings": "Settings changed",
-    "hermes:update-contact-fields": "Contact edited (Hermes)",
+    "hermes:update-contact-fields": "Contact edited (Cronos)",
     "add-policy": "Policy added",
     "update-policy": "Policy updated",
     "archive-policy": "Policy archived",
@@ -362,7 +362,7 @@ export function SettingsRoute() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="awm-label">Hermes connection</h2>
+          <h2 className="awm-label">Cronos connection</h2>
           <div className="rounded-sm border border-border bg-bg-surface p-4 flex items-center gap-4">
             {hermes.data?.state === "live" ? (
               <Wifi className="h-5 w-5 text-status-success" />
@@ -387,7 +387,7 @@ export function SettingsRoute() {
               <p className="mt-1 text-xs text-fg-muted">
                 {hermes.data?.lastEvent
                   ? `Last Hermes/CLI event ${formatRelative(hermes.data.lastEvent.timestamp)} (${formatShortDate(hermes.data.lastEvent.timestamp)})`
-                  : "Log a touchpoint via Hermes Telegram or python3 scripts/relationship_os.py log-touchpoint to see the bridge in action."}
+                  : "Log a touchpoint via Cronos Telegram or python3 scripts/relationship_os.py log-touchpoint to see the bridge in action."}
               </p>
             </div>
           </div>

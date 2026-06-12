@@ -96,3 +96,35 @@ export function humanize(value: string | null | undefined): string {
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/**
+ * Format a raw amount string as SGD currency: "$4,800" / "$15,000" /
+ * "$1,234,567". Accepts strings with commas, dollar signs, or whitespace
+ * (which it strips before parsing). Returns "—" for blank/zero inputs.
+ *
+ * Cents are only shown if the parsed value actually has a fractional part —
+ * a clean 4800 stays as "$4,800", not "$4,800.00".
+ *
+ * Hoisted from investments.tsx so the same formatter is used wherever a
+ * money value appears (policy cards, investments dashboard, etc.).
+ */
+export function formatMoney(raw: string | number | null | undefined): string {
+  if (raw === null || raw === undefined || raw === "") return "—";
+  const n =
+    typeof raw === "number"
+      ? raw
+      : Number(String(raw).replace(/[,$\s]/g, ""));
+  if (!isFinite(n) || n === 0) {
+    // Preserve a non-zero unparseable value (e.g. "TBC") so we don't hide
+    // information; only fall through to "—" for genuinely blank/zero inputs.
+    const str = String(raw).trim();
+    return str && str !== "0" ? str : "—";
+  }
+  const hasCents = Math.abs(n - Math.trunc(n)) > 0.0001;
+  return n.toLocaleString("en-SG", {
+    style: "currency",
+    currency: "SGD",
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+}

@@ -53,6 +53,38 @@ function parseKitJson<T = unknown>(result: KitCommandResult): T {
   }
 }
 
+// ---- Contact creation ----
+
+export interface CreateContactResult {
+  ok: boolean;
+  contact: { id: string; name: string; type: string };
+  message: string;
+}
+
+export async function createContact(payload: {
+  name: string;
+  type: string;
+  relationship_stage: string;
+  phone?: string;
+  email?: string;
+  occupation?: string;
+  company?: string;
+}): Promise<CreateContactResult> {
+  const args = [
+    "--format=json",
+    "create-contact",
+    "--name", payload.name,
+    "--type", payload.type,
+    "--stage", payload.relationship_stage,
+  ];
+  if (payload.phone)      args.push("--phone",      payload.phone);
+  if (payload.email)      args.push("--email",      payload.email);
+  if (payload.occupation) args.push("--occupation", payload.occupation);
+  if (payload.company)    args.push("--company",    payload.company);
+  const r = await runKit(args);
+  return parseKitJson<CreateContactResult>(r);
+}
+
 // ---- Reminder lifecycle ----
 
 export interface ReminderActionResult {
@@ -157,6 +189,24 @@ export async function generateAppointmentSummary(
   if (date) args.push("--date", date);
   const r = await runKit(args);
   return parseKitJson<AppointmentSummaryResult>(r);
+}
+
+export interface PolicySummaryResult {
+  ok: boolean;
+  pdf_path?: string;
+  md_path?: string;
+}
+
+export async function generatePolicySummary(
+  contactName: string
+): Promise<PolicySummaryResult> {
+  const r = await runKit([
+    "--format=json",
+    "policy-summary",
+    "--name",
+    contactName,
+  ]);
+  return parseKitJson<PolicySummaryResult>(r);
 }
 
 export interface ProposalResult {
@@ -385,6 +435,15 @@ export interface PolicyPayload {
   needs_category?: string;
   status?: string;
   notes?: string;
+  // Investments dashboard fields
+  portfolio?: string;
+  portfolio_tag?: string;
+  total_premiums_paid?: string;
+  lock_in_period?: string;
+  lock_in_end_date?: string;
+  premium_holiday_months?: string;
+  product_id?: string;
+  has_nomination?: string;
 }
 
 export interface PolicyResult {
@@ -416,6 +475,180 @@ export async function archivePolicy(policyId: string): Promise<PolicyResult> {
   return parseKitJson<PolicyResult>(r);
 }
 
+/** Soft-delete a policy: sets deleted_at so it disappears from the client
+ *  card and the Investments dashboard, and reappears in the Trash page's
+ *  Policies section until restored or purged. */
+export async function discardPolicy(policyId: string): Promise<PolicyResult> {
+  const r = await runKit(["--format=json", "discard-policy", "--id", policyId]);
+  return parseKitJson<PolicyResult>(r);
+}
+
+/** Restore a trashed policy: clears deleted_at so it reappears on the client
+ *  card. Idempotent — calling on an active policy returns ok with a no-op
+ *  message. */
+export async function restorePolicy(policyId: string): Promise<PolicyResult> {
+  const r = await runKit(["--format=json", "restore-policy", "--id", policyId]);
+  return parseKitJson<PolicyResult>(r);
+}
+
+/** Permanently remove a policy row. Only callable from the Trash page's
+ *  Delete-forever action; cannot be undone. */
+export async function purgePolicy(policyId: string): Promise<PolicyResult> {
+  const r = await runKit(["--format=json", "purge-policy", "--id", policyId]);
+  return parseKitJson<PolicyResult>(r);
+}
+
+// ---- Investment Products catalog ----
+
+export interface InvestmentProductPayload {
+  name?: string;
+  premium_term?: string;
+  lock_in_period?: string;
+  notes?: string;
+}
+
+export interface InvestmentProductResult {
+  ok: boolean;
+  product?: InvestmentProductPayload & {
+    id: string;
+    archived_at: string;
+    created_at: string;
+    updated_at: string;
+  };
+  product_id?: string;
+  updated_fields?: string[];
+  message: string;
+}
+
+export async function addInvestmentProduct(
+  payload: InvestmentProductPayload
+): Promise<InvestmentProductResult> {
+  const r = await runKit(["--format=json", "add-product"], payload);
+  return parseKitJson<InvestmentProductResult>(r);
+}
+
+export async function updateInvestmentProduct(
+  productId: string,
+  changes: Partial<InvestmentProductPayload>
+): Promise<InvestmentProductResult> {
+  const r = await runKit(
+    ["--format=json", "update-product", "--id", productId],
+    changes
+  );
+  return parseKitJson<InvestmentProductResult>(r);
+}
+
+export async function archiveInvestmentProduct(
+  productId: string
+): Promise<InvestmentProductResult> {
+  const r = await runKit(["--format=json", "archive-product", "--id", productId]);
+  return parseKitJson<InvestmentProductResult>(r);
+}
+
+// ---- Investments bulk upsert ----
+
+/** One near-match suggestion when the sheet's client_name didn't exact-match a
+ *  contact. Score is difflib's similarity ratio (0..1); 1.0 == identical. */
+export interface InvestmentNameCandidate {
+  contact_id: string;
+  name: string;
+  score: number;
+}
+
+/** A row that couldn't be auto-resolved by name and needs the user to pick.
+ *  The UI shows these in a dialog; the chosen contact_id (or "__skip__") is
+ *  then passed back as part of `nameResolution` on the apply call. */
+export interface InvestmentDecisionRow {
+  row: number;
+  client_name: string;
+  policy_number: string;
+  product_name: string;
+  candidates: InvestmentNameCandidate[];
+}
+
+/** A row that couldn't be matched at all — Jovial must create the contact
+ *  first, then re-run the import. These are NEVER created on apply. */
+export interface InvestmentErrorRow {
+  row: number;
+  client_name: string;
+  reason: string;
+}
+
+export interface BulkUpsertInvestmentsResult {
+  ok: boolean;
+  /** True when called with dry-run; in that case nothing was written. */
+  dry_run?: boolean;
+  created: number;
+  /** IDs of any policies created on this run. Empty on dry-run. */
+  created_ids?: string[];
+  updated: number;
+  skipped: number;
+  skipped_rows: Array<{
+    row: number;
+    policy_number?: string;
+    client_name?: string;
+    product_name?: string;
+    reason: string;
+  }>;
+  /** Rows whose client_name needs the user to disambiguate. Empty when every
+   *  row resolves cleanly. */
+  needs_decision?: InvestmentDecisionRow[];
+  /** Rows the import can't process at all (no exact and no fuzzy match). */
+  errors?: InvestmentErrorRow[];
+  as_of: string;
+  message: string;
+}
+
+/** Map of normalised sheet client_name → contact_id (or "__skip__"). The
+ *  Python side normalises by lowercasing + collapsing whitespace so the UI
+ *  can pass the names exactly as they appeared in the dry-run response. */
+export type InvestmentNameResolution = Record<string, string>;
+
+export async function bulkUpsertInvestments(
+  filePath: string,
+  asOf: string,
+  opts: {
+    dryRun?: boolean;
+    nameResolution?: InvestmentNameResolution;
+  } = {}
+): Promise<BulkUpsertInvestmentsResult> {
+  const args = ["--format=json", "bulk-upsert-investments", "--file", filePath];
+  if (asOf) args.push("--as-of", asOf);
+  if (opts.dryRun) args.push("--dry-run");
+  if (opts.nameResolution && Object.keys(opts.nameResolution).length > 0) {
+    args.push("--name-resolution", JSON.stringify(opts.nameResolution));
+  }
+  const r = await runKit(args);
+  return parseKitJson<BulkUpsertInvestmentsResult>(r);
+}
+
+// ---- Send client brief to Telegram ----
+
+/** Result from send-client-brief. ok=true means delivered. ok=false with code
+ * "telegram_not_configured" means the user hasn't set up the bot yet — the
+ * UI should show a setup prompt and may display the preview text inline. */
+export interface SendClientBriefResult {
+  ok: boolean;
+  code?: "telegram_not_configured";
+  message: string;
+  contact_id?: string;
+  contact_name?: string;
+  missing?: string[];
+  preview?: string;
+}
+
+export async function sendClientBrief(
+  contactId: string
+): Promise<SendClientBriefResult> {
+  const r = await runKit([
+    "--format=json",
+    "send-client-brief",
+    "--id",
+    contactId,
+  ]);
+  return parseKitJson<SendClientBriefResult>(r);
+}
+
 // ---- Contact maintenance ----
 
 export interface ArchiveContactResult {
@@ -434,6 +667,92 @@ export async function archiveContact(contactId: string): Promise<ArchiveContactR
 export async function unarchiveContact(contactId: string): Promise<ArchiveContactResult> {
   const r = await runKit(["--format=json", "unarchive-contact", "--id", contactId]);
   return parseKitJson<ArchiveContactResult>(r);
+}
+
+export interface TrashContactResult {
+  ok: boolean;
+  contact_id: string;
+  contact_name: string;
+  deleted_at: string;
+  message: string;
+}
+
+/** Soft-delete: moves the contact to the Trash page. */
+export async function trashContact(contactId: string): Promise<TrashContactResult> {
+  const r = await runKit(["--format=json", "delete-contact", "--id", contactId]);
+  return parseKitJson<TrashContactResult>(r);
+}
+
+export interface RestoreContactResult {
+  ok: boolean;
+  contact_id: string;
+  contact_name: string;
+  message: string;
+}
+
+/** Restore a trashed contact back to the active list. */
+export async function restoreFromTrash(contactId: string): Promise<RestoreContactResult> {
+  const r = await runKit(["--format=json", "restore-contact", "--id", contactId]);
+  return parseKitJson<RestoreContactResult>(r);
+}
+
+export interface PurgeContactResult {
+  ok: boolean;
+  contact_id: string;
+  contact_name: string;
+  touchpoints_deleted: number;
+  reminders_deleted: number;
+  policies_deleted: number;
+  relationships_deleted: number;
+  message: string;
+}
+
+/** Permanent delete from the Trash page. Also call purgeContactDocumentFolder separately. */
+export async function purgeContact(contactId: string): Promise<PurgeContactResult> {
+  const r = await runKit(["--format=json", "purge-contact", "--id", contactId]);
+  return parseKitJson<PurgeContactResult>(r);
+}
+
+export interface BulkImportPoliciesResult {
+  ok: boolean;
+  contact_id: string;
+  contact_name: string;
+  created: number;
+  policy_ids: string[];
+  message: string;
+}
+
+export async function bulkImportPolicies(
+  contactId: string,
+  filePath: string
+): Promise<BulkImportPoliciesResult> {
+  const r = await runKit([
+    "--format=json", "bulk-import-policies",
+    "--id", contactId,
+    "--file", filePath,
+  ]);
+  return parseKitJson<BulkImportPoliciesResult>(r);
+}
+
+export interface BulkImportContactsResult {
+  ok: boolean;
+  created: number;
+  skipped: number;
+  errors: number;
+  contacts: { id: string; name: string }[];
+  skipped_details: { row: number; name: string; reason: string }[];
+  error_details: { row: number; reason: string }[];
+  message: string;
+}
+
+export async function bulkImportContacts(
+  filePath: string
+): Promise<BulkImportContactsResult> {
+  const r = await runKit([
+    "--format=json", "bulk-import-contacts",
+    "--file", filePath,
+  ]);
+  return parseKitJson<BulkImportContactsResult>(r);
 }
 
 export interface RenameContactResult {

@@ -59,13 +59,13 @@ import type {
   ReminderPriority,
   ReminderStatus,
 } from "@/lib/enums";
+import type { PortfolioTag } from "@/lib/schema";
 
 export const CONTACT_TYPE_TONE: Record<ContactType, BadgeProps["tone"]> = {
+  cold: "neutral",
+  warming: "warning",
+  in_conversation: "info",
   client: "gold",
-  prospect: "info",
-  candidate: "cyan",
-  advisor: "success",
-  other: "neutral",
 };
 
 export const STAGE_TONE: Record<RelationshipStage, BadgeProps["tone"]> = {
@@ -95,4 +95,18 @@ export const REMINDER_STATUS_TONE: Record<ReminderStatus, BadgeProps["tone"]> = 
   snoozed: "info",
   done: "success",
   cancelled: "neutral",
+};
+
+// Portfolio tone mapping — visual cue for risk profile.
+// Cautious/Steady = calm tones; Balanced = centred gold; Adventurous = warm;
+// Ferrari = loudest; Custom = neutral.
+export const PORTFOLIO_TAG_TONE: Record<PortfolioTag, BadgeProps["tone"]> = {
+  pro_cautious: "info",
+  pro_balanced: "gold",
+  pro_adventurous: "warning",
+  elite_balanced: "gold",
+  elite_adventurous: "warning",
+  steady: "success",
+  ferrari: "danger",
+  custom: "neutral",
 };

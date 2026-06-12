@@ -24,6 +24,6 @@ if "$TAURI_BIN" build --bundles dmg; then
 fi
 
 echo
-echo "DMG build failed once. Cleaning AWMOS disk-image state and retrying..."
+echo "DMG build failed once. Cleaning Cronos disk-image state and retrying..."
 cleanup_dmg_state
 "$TAURI_BIN" build --bundles dmg

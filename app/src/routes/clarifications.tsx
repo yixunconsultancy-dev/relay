@@ -64,7 +64,7 @@ export function ClarificationsRoute() {
               : `${items.length} item${items.length === 1 ? "" : "s"} to triage`}
         </h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Bulk-import items Hermes wasn't confident enough to log straight
+          Bulk-import items Cronos wasn't confident enough to log straight
           through. Accept the guess, edit before logging, or discard.
         </p>
       </header>
@@ -78,7 +78,7 @@ export function ClarificationsRoute() {
       <div className="flex-1 overflow-auto p-8">
         {!clarifications.isPending && items.length === 0 ? (
           <p className="rounded-sm border border-border bg-bg-surface p-6 text-sm text-fg-muted italic">
-            Clarification queue is empty. When Hermes is unsure during a bulk
+            Clarification queue is empty. When Cronos is unsure during a bulk
             import, items land here for your review.
           </p>
         ) : (
@@ -123,7 +123,7 @@ function ClarificationCard({ item, busy, onLogAnyway, onDiscard }: CardProps) {
 
       {guess && (
         <div className="mb-3">
-          <h3 className="awm-label mb-1.5">Hermes's best guess</h3>
+          <h3 className="awm-label mb-1.5">Cronos's best guess</h3>
           <dl className="text-xs space-y-1">
             {Object.entries(guess).map(([k, v]) => (
               <div key={k} className="flex gap-2">
@@ -151,7 +151,7 @@ function ClarificationCard({ item, busy, onLogAnyway, onDiscard }: CardProps) {
           variant="primary"
           onClick={onLogAnyway}
           disabled={busy || !canLogAnyway}
-          title={canLogAnyway ? "Log Hermes's guess as-is" : "No structured guess to log"}
+          title={canLogAnyway ? "Log Cronos's guess as-is" : "No structured guess to log"}
         >
           <Check className="h-3.5 w-3.5" />
           Log as guess

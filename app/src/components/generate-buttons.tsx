@@ -6,6 +6,7 @@ import {
   FileSliders,
   Loader2,
   ScrollText,
+  ClipboardList,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,11 +21,12 @@ import {
 import { Field, Input } from "@/components/ui/input";
 import {
   generateAppointmentSummary,
+  generatePolicySummary,
   generateProposal,
   generateSlides,
 } from "@/lib/kit";
 
-type Pending = "summary" | "proposal" | "slides" | null;
+type Pending = "summary" | "policy_summary" | "proposal" | "slides" | null;
 
 interface Props {
   contactName: string;
@@ -52,6 +54,20 @@ export function GenerateButtons({ contactName }: Props) {
     },
     onSuccess: (r) => {
       setLastResult(`Appointment summary → ${r.pdf_path ?? r.md_path ?? "ok"}`);
+      refresh();
+    },
+    onError: (e) => setError((e as Error).message),
+    onSettled: () => setPending(null),
+  });
+
+  const policySummary = useMutation({
+    mutationFn: () => generatePolicySummary(contactName),
+    onMutate: () => {
+      setPending("policy_summary");
+      setError(null);
+    },
+    onSuccess: (r) => {
+      setLastResult(`Policy summary → ${r.pdf_path ?? r.md_path ?? "ok"}`);
       refresh();
     },
     onError: (e) => setError((e as Error).message),
@@ -105,6 +121,19 @@ export function GenerateButtons({ contactName }: Props) {
             <FileText className="h-3.5 w-3.5" />
           )}
           Appointment summary
+        </Button>
+        <Button
+          variant="gold"
+          size="sm"
+          disabled={pending !== null}
+          onClick={() => policySummary.mutate()}
+        >
+          {pending === "policy_summary" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ClipboardList className="h-3.5 w-3.5" />
+          )}
+          Policy summary
         </Button>
         <Button
           variant="secondary"

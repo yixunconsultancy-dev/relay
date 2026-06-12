@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,10 @@ import {
   logTouchpoint,
   type TouchpointInputPayload,
 } from "@/lib/kit";
-import { queryKeys, useSettings } from "@/lib/queries";
+import { queryKeys, useContacts, useSettings } from "@/lib/queries";
 import {
   REAL_INTERACTION_TOUCHPOINT_TYPES,
+  TOUCHPOINT_TYPE_LABEL,
   SENTIMENTS,
   REMINDER_PRIORITIES,
   REMINDER_TYPES,
@@ -55,7 +56,7 @@ function initialState(defaultContact: string, today: string): FormState {
   return {
     contact_name: defaultContact,
     touch_date: today,
-    touchpoint_type: "meeting",
+    touchpoint_type: "casual_message",
     sentiment: "neutral",
     summary: "",
     raw_input: "",
@@ -74,6 +75,7 @@ export function QuickLogDialog({
   defaultContactName = "",
 }: QuickLogDialogProps) {
   const settings = useSettings();
+  const contacts = useContacts();
   const today = todayIso(settings.data?.timezone);
   const [form, setForm] = useState<FormState>(() =>
     initialState(defaultContactName, today)
@@ -182,11 +184,13 @@ export function QuickLogDialog({
           <DialogBody className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <Field label="Contact name" htmlFor="ql-contact" className="col-span-2">
-                <Input
+                <ContactAutocomplete
                   id="ql-contact"
                   value={form.contact_name}
-                  onChange={(e) => update("contact_name", e.target.value)}
-                  placeholder="e.g. Sarah Lim"
+                  onChange={(v) => update("contact_name", v)}
+                  contactNames={(contacts.data ?? [])
+                    .filter((c) => !c.archived_at)
+                    .map((c) => c.name)}
                 />
               </Field>
               <Field label="Date" htmlFor="ql-date">
@@ -203,6 +207,7 @@ export function QuickLogDialog({
                   value={form.touchpoint_type}
                   onChange={(v) => update("touchpoint_type", v as TouchpointType)}
                   options={REAL_INTERACTION_TOUCHPOINT_TYPES}
+                  labels={TOUCHPOINT_TYPE_LABEL}
                 />
               </Field>
               <Field label="Sentiment" htmlFor="ql-sentiment">
@@ -319,16 +324,93 @@ export function QuickLogDialog({
   );
 }
 
+function ContactAutocomplete({
+  id,
+  value,
+  onChange,
+  contactNames,
+}: {
+  id?: string;
+  value: string;
+  onChange: (v: string) => void;
+  contactNames: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const matches =
+    value.trim().length > 0
+      ? contactNames.filter((n) =>
+          n.toLowerCase().includes(value.toLowerCase())
+        )
+      : [];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        id={id}
+        type="text"
+        autoComplete="off"
+        value={value}
+        placeholder="e.g. Sarah Lim"
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => value.trim() && setOpen(true)}
+        className="h-9 w-full rounded-sm border border-border bg-bg-surface px-3 text-sm text-fg placeholder:text-fg-subtle focus:border-gold/60 focus:outline-none"
+      />
+      {open && matches.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full rounded-sm border border-border bg-bg-surface shadow-lg max-h-48 overflow-y-auto">
+          {matches.slice(0, 8).map((name) => (
+            <li key={name}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault(); // prevent input blur before click registers
+                  onChange(name);
+                  setOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-fg hover:bg-bg-raised transition-colors"
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && value.trim().length > 0 && matches.length === 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-sm border border-border bg-bg-surface px-3 py-2 text-xs text-fg-muted italic shadow-lg">
+          No existing client — will create a new profile.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EnumSelect({
   id,
   value,
   onChange,
   options,
+  labels,
 }: {
   id?: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
+  labels?: Record<string, string>;
 }) {
   return (
     <select
@@ -339,7 +421,7 @@ function EnumSelect({
     >
       {options.map((opt) => (
         <option key={opt} value={opt}>
-          {opt === "" ? "—" : humanize(opt)}
+          {opt === "" ? "—" : (labels?.[opt] ?? humanize(opt))}
         </option>
       ))}
     </select>

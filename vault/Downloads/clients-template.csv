@@ -1,0 +1,3 @@
+"name","type","phone","email","occupation","company","address","birthday","referral_source","notes","cf_annual_income","cf_risk_appetite"
+"Jane Tan","client","+65 9123 4567","jane@example.com","Business Owner","Tan & Co","10 Orchard Rd #08-01 Singapore 238896","1985-06-15","Referral from John Lim","Met at networking event","120000","Moderate"
+"David Ng","warming","+65 8765 4321","david.ng@email.com","Engineer","TechCorp Pte Ltd","","1990-03-22","","","",""

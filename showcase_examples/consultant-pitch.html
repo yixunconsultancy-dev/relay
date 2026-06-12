@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relationship OS for Financial Consultants</title>
+
+    <!-- Google Fonts: Cormorant Garamond (display), Barlow (body), Barlow Condensed (labels), JetBrains Mono (numerics) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        /* ===========================================
+           THEME — AWM Relationship OS
+           Forest blacks, restrained gold, cream text.
+           =========================================== */
+        :root {
+            /* Surfaces */
+            --bg: #050505;
+            --bg-surface: #0E0E0E;
+            --bg-raised: #1A1A1A;
+            --border: #2A2A2A;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+
+            /* Type */
+            --text: #F5F1E8;
+            --text-soft: #D8D0C3;
+            --text-muted: #A6A6A6;
+            --text-faint: #6F6F6F;
+
+            /* Accent — used sparingly */
+            --accent: #C6A34F;
+            --accent-bright: #E2BC6A;
+            --accent-dim: rgba(198, 163, 79, 0.35);
+            --accent-wash: rgba(198, 163, 79, 0.08);
+
+            /* Status (used in graph + intelligence slides) */
+            --ok: #7A8F62;
+            --warn: #B58B3B;
+            --err: #B85C52;
+
+            /* Type stacks */
+            --font-display: "Cormorant Garamond", Georgia, serif;
+            --font-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+            --font-label: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+            --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+
+            /* Sizes — all clamp()ed for viewport fit */
+            --title-size: clamp(2.2rem, 6.5vw, 5.5rem);
+            --h2-size: clamp(1.5rem, 3.6vw, 2.75rem);
+            --h3-size: clamp(1rem, 2vw, 1.5rem);
+            --body-size: clamp(0.8rem, 1.2vw, 1.05rem);
+            --small-size: clamp(0.65rem, 0.95vw, 0.85rem);
+            --label-size: clamp(0.65rem, 0.85vw, 0.78rem);
+
+            /* Spacing */
+            --slide-padding: clamp(2rem, 5vw, 5rem);
+            --content-gap: clamp(0.75rem, 1.8vw, 1.75rem);
+            --element-gap: clamp(0.4rem, 1vw, 1rem);
+
+            /* Motion */
+            --ease: cubic-bezier(0.22, 1, 0.36, 1);
+            --duration: 0.9s;
+        }
+
+        /* ===========================================
+           VIEWPORT BASE (mandatory — verbatim)
+           =========================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; overflow-x: hidden; }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-body);
+            font-weight: 400;
+            font-size: var(--body-size);
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.5;
+            letter-spacing: 0.005em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: var(--bg);
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            padding: var(--slide-padding);
+        }
+
+        .card, .container, .content-box {
+            max-width: min(92vw, 1180px);
+            max-height: min(82vh, 720px);
+        }
+
+        .feature-list, .bullet-list { gap: clamp(0.4rem, 1vh, 1rem); }
+        .feature-list li, .bullet-list li { font-size: var(--body-size); line-height: 1.5; }
+
+        img, .image-container {
+            max-width: 100%;
+            max-height: min(50vh, 400px);
+            object-fit: contain;
+        }
+
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(1rem, 3.5vw, 2.5rem);
+                --content-gap: clamp(0.5rem, 1.5vw, 1.2rem);
+                --title-size: clamp(1.6rem, 5vw, 3.2rem);
+                --h2-size: clamp(1.2rem, 3vw, 2rem);
+            }
+        }
+        @media (max-height: 600px) {
+            :root {
+                --slide-padding: clamp(0.75rem, 3vw, 1.75rem);
+                --content-gap: clamp(0.3rem, 1vw, 0.9rem);
+                --title-size: clamp(1.3rem, 4.5vw, 2.4rem);
+                --body-size: clamp(0.72rem, 1.1vw, 0.95rem);
+            }
+            .nav-dots, .keyboard-hint, .decorative { display: none; }
+        }
+        @media (max-height: 500px) {
+            :root {
+                --slide-padding: clamp(0.5rem, 2vw, 1.2rem);
+                --title-size: clamp(1.1rem, 3.8vw, 1.7rem);
+            }
+        }
+        @media (max-width: 600px) {
+            :root { --title-size: clamp(1.5rem, 8vw, 2.8rem); }
+            .grid, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
+            .two-col { grid-template-columns: 1fr !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html { scroll-behavior: auto; }
+        }
+
+        /* ===========================================
+           TYPOGRAPHY
+           Cormorant for display, Barlow for body,
+           Barlow Condensed for tiny labels.
+           =========================================== */
+        h1, h2, h3 { font-family: var(--font-display); font-weight: 500; color: var(--text); }
+        h1 {
+            font-size: var(--title-size);
+            line-height: 1.02;
+            letter-spacing: -0.015em;
+        }
+        h2 {
+            font-size: var(--h2-size);
+            line-height: 1.1;
+            letter-spacing: -0.01em;
+            font-weight: 500;
+        }
+        h3 {
+            font-size: var(--h3-size);
+            line-height: 1.2;
+            font-weight: 500;
+        }
+
+        .label {
+            font-family: var(--font-label);
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            font-size: var(--label-size);
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+        .label.gold { color: var(--accent); }
+
+        .mono {
+            font-family: var(--font-mono);
+            font-size: 0.92em;
+            color: var(--text-soft);
+        }
+
+        em { font-style: italic; font-family: var(--font-display); color: var(--accent); font-weight: 500; }
+
+        .gold { color: var(--accent); }
+        .soft { color: var(--text-soft); }
+        .muted { color: var(--text-muted); }
+        .faint { color: var(--text-faint); }
+
+        /* Thin gold underline rule for hero headings */
+        .gold-rule {
+            display: inline-block;
+            width: clamp(36px, 5vw, 64px);
+            height: 1px;
+            background: var(--accent);
+            margin: clamp(0.6rem, 1.2vw, 1.2rem) 0;
+        }
+        .gold-rule.vertical {
+            width: 1px;
+            height: clamp(36px, 5vh, 96px);
+            margin: 0;
+        }
+
+        /* ===========================================
+           ATMOSPHERE — subtle vignette + grid texture
+           =========================================== */
+        .slide::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at top, rgba(198, 163, 79, 0.04), transparent 60%),
+                radial-gradient(ellipse at bottom right, rgba(198, 163, 79, 0.03), transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .slide::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .slide-content { position: relative; z-index: 1; }
+
+        /* Slide number — top right, JetBrains Mono */
+        .slide-num {
+            position: absolute;
+            top: clamp(1rem, 2vw, 2rem);
+            right: clamp(1rem, 2vw, 2rem);
+            font-family: var(--font-mono);
+            font-size: var(--label-size);
+            color: var(--text-faint);
+            letter-spacing: 0.1em;
+            z-index: 2;
+        }
+        .slide-num .sep { color: var(--border); margin: 0 0.4em; }
+
+        /* Quiet wordmark — bottom left */
+        .wordmark {
+            position: absolute;
+            bottom: clamp(1rem, 2vw, 2rem);
+            left: clamp(1rem, 2vw, 2rem);
+            font-family: var(--font-label);
+            font-size: var(--label-size);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            z-index: 2;
+        }
+        .wordmark .dot {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            background: var(--accent);
+            vertical-align: middle;
+            margin-right: 0.6em;
+            margin-bottom: 2px;
+        }
+
+        /* ===========================================
+           REVEAL ANIMATIONS
+           Subtle fade + lift, staggered.
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(18px);
+            transition:
+                opacity var(--duration) var(--ease),
+                transform var(--duration) var(--ease);
+        }
+        .slide.visible .reveal { opacity: 1; transform: translateY(0); }
+
+        .reveal:nth-child(1) { transition-delay: 0.08s; }
+        .reveal:nth-child(2) { transition-delay: 0.18s; }
+        .reveal:nth-child(3) { transition-delay: 0.28s; }
+        .reveal:nth-child(4) { transition-delay: 0.38s; }
+        .reveal:nth-child(5) { transition-delay: 0.48s; }
+        .reveal:nth-child(6) { transition-delay: 0.58s; }
+        .reveal:nth-child(7) { transition-delay: 0.68s; }
+
+        .reveal-x {
+            opacity: 0;
+            transform: translateX(-12px);
+            transition:
+                opacity calc(var(--duration) * 0.9) var(--ease),
+                transform calc(var(--duration) * 0.9) var(--ease);
+        }
+        .slide.visible .reveal-x { opacity: 1; transform: translateX(0); }
+
+        .draw-line {
+            stroke-dasharray: 200;
+            stroke-dashoffset: 200;
+            transition: stroke-dashoffset 1.6s var(--ease);
+        }
+        .slide.visible .draw-line { stroke-dashoffset: 0; }
+
+        /* ===========================================
+           SLIDE 1 — TITLE
+           =========================================== */
+        .title-slide .slide-content {
+            justify-content: center;
+            align-items: flex-start;
+            padding-left: clamp(3rem, 8vw, 8rem);
+        }
+        .title-slide h1 {
+            max-width: 16ch;
+        }
+        .title-slide .tagline {
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+            max-width: 38ch;
+            font-size: clamp(0.95rem, 1.5vw, 1.25rem);
+            color: var(--text-soft);
+            font-weight: 300;
+            font-family: var(--font-body);
+            font-style: italic;
+            line-height: 1.5;
+        }
+        .title-slide .super {
+            margin-bottom: clamp(1rem, 2vw, 1.8rem);
+        }
+        .title-slide .meta {
+            position: absolute;
+            bottom: clamp(2rem, 4vw, 3.5rem);
+            left: clamp(3rem, 8vw, 8rem);
+            display: flex;
+            gap: clamp(2rem, 4vw, 4rem);
+            font-family: var(--font-mono);
+            font-size: var(--label-size);
+            color: var(--text-faint);
+            letter-spacing: 0.05em;
+        }
+        .title-slide .meta strong { color: var(--text-soft); font-weight: 500; display: block; font-family: var(--font-label); text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 0.4em; }
+
+        /* Title slide vertical accent */
+        .title-slide .vertical-mark {
+            position: absolute;
+            left: clamp(1.5rem, 4vw, 4rem);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            font-family: var(--font-label);
+            font-size: var(--label-size);
+            letter-spacing: 0.3em;
+            color: var(--accent);
+            writing-mode: vertical-rl;
+            text-transform: uppercase;
+        }
+        .title-slide .vertical-mark::before,
+        .title-slide .vertical-mark::after {
+            content: "";
+            width: 1px;
+            height: clamp(40px, 8vh, 100px);
+            background: var(--accent-dim);
+            writing-mode: horizontal-tb;
+        }
+
+        /* ===========================================
+           STANDARD CONTENT SLIDES
+           =========================================== */
+        .slide-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            margin-bottom: clamp(1.2rem, 2.5vw, 2.2rem);
+        }
+        .slide-header .label { margin-bottom: 0.2rem; }
+        .slide-header h2 { max-width: 22ch; }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(2rem, 5vw, 5rem);
+            align-items: center;
+        }
+
+        .two-col-wide {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: clamp(2rem, 5vw, 4rem);
+            align-items: center;
+        }
+
+        .bullet-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.7rem, 1.4vw, 1.1rem);
+        }
+        .bullet-list li {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: clamp(0.8rem, 1.5vw, 1.2rem);
+            align-items: baseline;
+            color: var(--text-soft);
+            padding-bottom: clamp(0.7rem, 1.3vw, 1rem);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .bullet-list li:last-child { border-bottom: 0; }
+        .bullet-list .num {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--accent);
+            letter-spacing: 0.05em;
+        }
+        .bullet-list strong {
+            color: var(--text);
+            font-family: var(--font-display);
+            font-weight: 500;
+            font-size: 1.2em;
+            display: block;
+            margin-bottom: 0.2em;
+            line-height: 1.2;
+        }
+        .bullet-list .desc {
+            color: var(--text-muted);
+            font-size: var(--small-size);
+            line-height: 1.5;
+        }
+
+        /* ===========================================
+           SLIDE 3 — BEFORE / AFTER
+           =========================================== */
+        .compare {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: clamp(1.5rem, 3vw, 3rem);
+            align-items: stretch;
+            margin-top: clamp(1rem, 2vw, 2rem);
+        }
+        .compare-col {
+            padding: clamp(1.5rem, 3vw, 2.5rem);
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+        }
+        .compare-col.after {
+            border-color: var(--accent-dim);
+            background: linear-gradient(180deg, rgba(198, 163, 79, 0.03), transparent);
+        }
+        .compare-col .label { margin-bottom: 0.4rem; }
+        .compare-col h3 {
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+            margin-bottom: 0.6rem;
+            color: var(--text);
+        }
+        .compare-col p {
+            color: var(--text-muted);
+            font-size: var(--small-size);
+            line-height: 1.55;
+        }
+        .compare-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            font-size: 1.5em;
+        }
+
+        /* ===========================================
+           SLIDE 4 — TELEGRAM MOCK
+           =========================================== */
+        .tg-mock {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: clamp(1.2rem, 2vw, 1.8rem);
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+            max-width: 100%;
+        }
+        .tg-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-mono);
+            font-size: var(--label-size);
+            color: var(--text-faint);
+            padding-bottom: 0.7rem;
+            border-bottom: 1px solid var(--border-subtle);
+            letter-spacing: 0.08em;
+        }
+        .tg-header .dot { color: var(--ok); margin-right: 0.4em; }
+        .tg-msg {
+            padding: 0.8rem 1rem;
+            background: var(--bg-raised);
+            border-left: 2px solid var(--accent);
+            font-size: var(--small-size);
+            line-height: 1.55;
+            color: var(--text-soft);
+            font-family: var(--font-body);
+        }
+        .tg-msg .from {
+            font-family: var(--font-label);
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            font-size: 0.65em;
+            color: var(--text-faint);
+            display: block;
+            margin-bottom: 0.4em;
+        }
+        .tg-reply {
+            border-left-color: var(--ok);
+            background: rgba(122, 143, 98, 0.05);
+        }
+        .tg-reply .from { color: var(--ok); }
+
+        .parse-flow {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.6rem, 1vw, 0.9rem);
+        }
+        .parse-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: clamp(0.8rem, 1.5vw, 1.2rem);
+            align-items: baseline;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .parse-row:last-child { border-bottom: 0; }
+        .parse-key {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--accent);
+            letter-spacing: 0.05em;
+        }
+        .parse-val {
+            font-family: var(--font-body);
+            font-size: var(--small-size);
+            color: var(--text-soft);
+            line-height: 1.4;
+        }
+        .parse-val .pill {
+            display: inline-block;
+            padding: 0.15em 0.55em;
+            background: rgba(198, 163, 79, 0.08);
+            border: 1px solid var(--accent-dim);
+            color: var(--accent);
+            font-family: var(--font-mono);
+            font-size: 0.85em;
+        }
+
+        /* ===========================================
+           SLIDE 5 — TODAY SCREEN MOCK
+           =========================================== */
+        .today-mock {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: clamp(1.2rem, 2.2vw, 2rem);
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: clamp(0.8rem, 1.5vw, 1.2rem);
+            min-height: clamp(280px, 50vh, 460px);
+        }
+        .today-greet {
+            font-family: var(--font-display);
+            font-size: clamp(1.2rem, 2.4vw, 1.8rem);
+            color: var(--text);
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .today-greet .date {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-faint);
+            font-style: normal;
+        }
+        .today-score {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.7rem 0;
+            border-top: 1px solid var(--border-subtle);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .score-num {
+            font-family: var(--font-display);
+            font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+            color: var(--accent);
+            line-height: 1;
+            font-weight: 500;
+        }
+        .score-label {
+            font-family: var(--font-label);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            font-size: var(--label-size);
+            color: var(--text-muted);
+        }
+        .garden-svg {
+            width: 100%;
+            height: clamp(60px, 9vh, 90px);
+        }
+        .today-sections {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: clamp(0.6rem, 1.2vw, 1rem);
+        }
+        .today-section .label { margin-bottom: 0.4rem; display: block; }
+        .today-section ul {
+            list-style: none;
+            font-size: var(--small-size);
+            color: var(--text-soft);
+            line-height: 1.7;
+        }
+        .today-section li {
+            display: flex;
+            gap: 0.5em;
+            align-items: baseline;
+        }
+        .today-section li::before {
+            content: "—";
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        /* ===========================================
+           GRID LAYOUTS — for intelligence, debt
+           =========================================== */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(0.8rem, 1.5vw, 1.4rem);
+        }
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(0.7rem, 1.3vw, 1.1rem);
+        }
+        .intel-card {
+            padding: clamp(1.2rem, 2vw, 1.8rem);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-top: 2px solid var(--accent);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .intel-card h3 {
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: clamp(1rem, 1.6vw, 1.3rem);
+            color: var(--text);
+            margin-bottom: 0.3rem;
+        }
+        .intel-card p {
+            color: var(--text-muted);
+            font-size: var(--small-size);
+            line-height: 1.5;
+        }
+        .intel-card.at-risk { border-top-color: var(--err); }
+        .intel-card.unfollowed { border-top-color: var(--warn); }
+        .intel-card.cooling { border-top-color: var(--accent); }
+        .intel-card.ripe { border-top-color: var(--ok); }
+
+        /* ===========================================
+           SLIDE 9 — GRAPH (inline SVG)
+           =========================================== */
+        .graph-wrap {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: clamp(2rem, 4vw, 4rem);
+            align-items: center;
+        }
+        @media (max-width: 800px) { .graph-wrap { grid-template-columns: 1fr; } }
+        .graph-svg {
+            width: 100%;
+            height: clamp(320px, 56vh, 520px);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+        }
+        .graph-legend {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            font-size: var(--small-size);
+            color: var(--text-soft);
+        }
+        .legend-row .swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .legend-row .edge {
+            width: 22px;
+            height: 2px;
+            flex-shrink: 0;
+        }
+
+        /* ===========================================
+           SLIDE 10 — KANBAN
+           =========================================== */
+        .kanban {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: clamp(0.6rem, 1.2vw, 1rem);
+        }
+        .kanban-col {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: clamp(0.8rem, 1.3vw, 1.1rem);
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            min-height: clamp(220px, 42vh, 380px);
+        }
+        .kanban-col .label {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .kanban-col .count {
+            font-family: var(--font-mono);
+            color: var(--text-soft);
+            letter-spacing: 0.05em;
+        }
+        .kanban-col.due .label { color: var(--accent); }
+        .kanban-col.due .count { color: var(--accent); }
+        .kanban-card {
+            background: var(--bg-raised);
+            padding: 0.6rem 0.7rem;
+            border-left: 2px solid var(--border);
+            font-size: var(--small-size);
+            line-height: 1.4;
+            color: var(--text-soft);
+        }
+        .kanban-card.gold-card { border-left-color: var(--accent); }
+        .kanban-card .meta {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 0.85em;
+            color: var(--text-faint);
+            margin-top: 0.2em;
+            letter-spacing: 0.03em;
+        }
+
+        /* ===========================================
+           SLIDE 11 — DOES / DOES NOT
+           =========================================== */
+        .does-not {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(2rem, 4vw, 4rem);
+            margin-top: 1rem;
+        }
+        .does-col h3 {
+            font-family: var(--font-label);
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            font-size: var(--label-size);
+            color: var(--accent);
+            font-weight: 400;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 1px solid var(--accent-dim);
+        }
+        .does-col.not h3 {
+            color: var(--text-muted);
+            border-bottom-color: var(--border);
+        }
+        .does-col ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.6rem, 1.2vw, 1rem);
+        }
+        .does-col li {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.8rem;
+            align-items: baseline;
+            font-size: var(--body-size);
+            color: var(--text-soft);
+            line-height: 1.45;
+        }
+        .does-col li::before {
+            content: "+";
+            font-family: var(--font-mono);
+            color: var(--accent);
+            font-size: 0.9em;
+        }
+        .does-col.not li {
+            color: var(--text-muted);
+        }
+        .does-col.not li::before {
+            content: "—";
+            color: var(--text-faint);
+        }
+
+        /* ===========================================
+           SLIDE 12 — ARCHITECTURE DIAGRAM
+           =========================================== */
+        .arch-diagram {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: clamp(1.5rem, 3vw, 3rem);
+            align-items: center;
+            margin-top: clamp(1rem, 2vw, 2rem);
+        }
+        .arch-node {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: clamp(1.4rem, 2.5vw, 2.2rem);
+            text-align: center;
+            position: relative;
+        }
+        .arch-node.center {
+            border-color: var(--accent-dim);
+            background: linear-gradient(180deg, rgba(198, 163, 79, 0.05), var(--bg-surface));
+        }
+        .arch-node h3 {
+            font-family: var(--font-display);
+            font-style: italic;
+            font-size: clamp(1.1rem, 2vw, 1.6rem);
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+        .arch-node p {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .arch-node .label {
+            display: block;
+            margin-bottom: 0.6rem;
+        }
+        .arch-connector {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            font-size: var(--label-size);
+            letter-spacing: 0.1em;
+        }
+        .arch-connector .line {
+            width: clamp(40px, 5vw, 80px);
+            height: 1px;
+            background: var(--accent-dim);
+        }
+        .arch-bottom {
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+            text-align: center;
+            padding-top: clamp(1.5rem, 3vw, 2.5rem);
+            border-top: 1px solid var(--border-subtle);
+        }
+        .arch-bottom .mono { color: var(--text-muted); }
+
+        /* ===========================================
+           SLIDE 13 — CLOSING
+           =========================================== */
+        .closing-slide .slide-content {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .closing-slide h1 {
+            font-style: italic;
+            max-width: 16ch;
+            line-height: 1.05;
+        }
+        .closing-slide .sub {
+            margin-top: clamp(1.5rem, 3vw, 2.5rem);
+            max-width: 42ch;
+            color: var(--text-soft);
+            font-size: clamp(0.95rem, 1.4vw, 1.2rem);
+            line-height: 1.6;
+        }
+        .closing-slide .closing-tag {
+            margin-top: clamp(2rem, 4vw, 3.5rem);
+            display: flex;
+            gap: clamp(2rem, 4vw, 3.5rem);
+            font-family: var(--font-label);
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            font-size: var(--label-size);
+            color: var(--accent);
+        }
+        .closing-slide .closing-tag span {
+            position: relative;
+        }
+        .closing-slide .closing-tag span:not(:last-child)::after {
+            content: "·";
+            position: absolute;
+            right: clamp(-1.5rem, -2.5vw, -2.5rem);
+            color: var(--accent-dim);
+        }
+
+        /* ===========================================
+           NAVIGATION (progress + dots)
+           =========================================== */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 1px;
+            background: var(--accent);
+            z-index: 100;
+            transition: width 0.3s var(--ease);
+            box-shadow: 0 0 8px var(--accent-dim);
+        }
+        .nav-dots {
+            position: fixed;
+            right: clamp(0.8rem, 1.5vw, 1.5rem);
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 99;
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+        }
+        .nav-dot {
+            width: 6px;
+            height: 6px;
+            border: 1px solid var(--text-faint);
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s var(--ease);
+            padding: 0;
+        }
+        .nav-dot:hover { border-color: var(--accent); }
+        .nav-dot.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            transform: scale(1.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+    <nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+
+    <!-- ====================================================
+         SLIDE 1 — TITLE
+         ==================================================== -->
+    <section class="slide title-slide">
+        <div class="vertical-mark reveal">Relationship · OS</div>
+        <div class="slide-num"><span>01</span><span class="sep">/</span><span>13</span></div>
+
+        <div class="slide-content">
+            <div class="super reveal">
+                <span class="label gold">AWM · Private Operating System</span>
+            </div>
+            <h1 class="reveal">Relationship <em>OS</em> for Financial Consultants</h1>
+            <div class="gold-rule reveal"></div>
+            <p class="tagline reveal">A private operating system for the relationships that matter — captured from anywhere, structured automatically, remembered for you.</p>
+        </div>
+
+        <div class="meta">
+            <div class="reveal"><strong>Built for</strong>Consultants &amp; their managers</div>
+            <div class="reveal"><strong>Surfaces</strong>Telegram · macOS app</div>
+            <div class="reveal"><strong>Disposition</strong>Local · private · quiet</div>
+        </div>
+
+        <div class="wordmark"><span class="dot"></span>AWM</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 2 — THE PROBLEM
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>02</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">The problem</span>
+                <h2 class="reveal">Consultants lose track of relationships — <em>quietly, expensively</em>.</h2>
+            </div>
+
+            <div class="two-col">
+                <ul class="bullet-list">
+                    <li class="reveal">
+                        <span class="num">01</span>
+                        <div>
+                            <strong>Scattered capture</strong>
+                            <span class="desc">Notebooks. Notes app. WhatsApp threads. Three different CRMs that no one keeps up to date.</span>
+                        </div>
+                    </li>
+                    <li class="reveal">
+                        <span class="num">02</span>
+                        <div>
+                            <strong>The mental ledger fails</strong>
+                            <span class="desc">After twenty meetings in a week, "what did we last talk about" turns into improvisation.</span>
+                        </div>
+                    </li>
+                    <li class="reveal">
+                        <span class="num">03</span>
+                        <div>
+                            <strong>Follow-ups drift</strong>
+                            <span class="desc">"I'll send that next Friday" becomes three months later — or never.</span>
+                        </div>
+                    </li>
+                    <li class="reveal">
+                        <span class="num">04</span>
+                        <div>
+                            <strong>Birthdays missed, renewals skipped</strong>
+                            <span class="desc">The small touches that make a relationship feel cared for fall through the cracks first.</span>
+                        </div>
+                    </li>
+                </ul>
+
+                <div class="reveal" style="display: flex; flex-direction: column; gap: 1rem; align-items: flex-start; padding-left: clamp(1rem, 3vw, 3rem); border-left: 1px solid var(--border);">
+                    <span class="label">The cost</span>
+                    <p style="font-family: var(--font-display); font-style: italic; font-size: clamp(1.2rem, 2.4vw, 1.9rem); line-height: 1.3; color: var(--text-soft); max-width: 22ch;">
+                        A consultant's book is built on memory. When memory fails, the book quietly leaks.
+                    </p>
+                    <p class="muted" style="font-size: var(--small-size); max-width: 32ch; line-height: 1.5;">
+                        Most CRMs make this worse — they add an input tax instead of reducing one.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>AWM Relationship OS</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 3 — THE SHIFT
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>03</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">The shift</span>
+                <h2 class="reveal">From <em>CRM-as-database</em> to <em>private operating aid</em>.</h2>
+            </div>
+
+            <div class="compare">
+                <div class="compare-col reveal-x">
+                    <span class="label">Before</span>
+                    <h3>CRM as database</h3>
+                    <p>Opens like a spreadsheet. Demands typed updates. Forces the consultant to be the integration layer between three meetings, a notepad, and a form.</p>
+                    <p class="faint" style="font-size: var(--small-size); font-style: italic; margin-top: 0.5rem;">"I'll update it on Sunday." (Never happens.)</p>
+                </div>
+
+                <div class="compare-arrow reveal">→</div>
+
+                <div class="compare-col after reveal-x">
+                    <span class="label gold">After</span>
+                    <h3>Private operating aid</h3>
+                    <p>Capture in your natural language wherever you are. Structure happens for you. The system surfaces who needs attention and why, on its own timing.</p>
+                    <p class="gold" style="font-size: var(--small-size); font-style: italic; margin-top: 0.5rem;">"I just spoke into Telegram. Everything else handled itself."</p>
+                </div>
+            </div>
+
+            <p class="muted reveal" style="text-align: center; margin-top: clamp(1.5rem, 3vw, 2.5rem); max-width: 60ch; margin-left: auto; margin-right: auto; line-height: 1.6; font-size: var(--small-size);">
+                The work doesn't disappear — it moves from the consultant to the system. <em>That is the only honest definition of leverage.</em>
+            </p>
+        </div>
+        <div class="wordmark"><span class="dot"></span>AWM Relationship OS</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 4 — CAPTURE FROM ANYWHERE (Telegram mock)
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>04</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 01 · Capture</span>
+                <h2 class="reveal">Send a message. Get a structured client record.</h2>
+            </div>
+
+            <div class="two-col">
+                <div class="tg-mock reveal">
+                    <div class="tg-header">
+                        <span><span class="dot">●</span>Telegram · Relationship OS</span>
+                        <span>14:32</span>
+                    </div>
+                    <div class="tg-msg">
+                        <span class="from">You</span>
+                        Had coffee with David Tan today — he's interested in retirement planning and worried about his eldest's overseas tuition. Follow up next Friday with the IRA breakdown.
+                    </div>
+                    <div class="tg-msg tg-reply">
+                        <span class="from">Relationship OS</span>
+                        Logged. Touchpoint added to <span class="mono gold">David Tan</span>. Reminder set for <span class="mono gold">2026-05-30</span>.
+                    </div>
+                </div>
+
+                <div class="parse-flow reveal">
+                    <span class="label gold" style="margin-bottom: 0.4rem;">Parsed → SQLite</span>
+                    <div class="parse-row">
+                        <span class="parse-key">contact</span>
+                        <span class="parse-val">David Tan <span class="pill">existing</span></span>
+                    </div>
+                    <div class="parse-row">
+                        <span class="parse-key">touchpoint</span>
+                        <span class="parse-val">coffee · sentiment <span class="pill">warm</span></span>
+                    </div>
+                    <div class="parse-row">
+                        <span class="parse-key">topics</span>
+                        <span class="parse-val">retirement · tuition · family</span>
+                    </div>
+                    <div class="parse-row">
+                        <span class="parse-key">action</span>
+                        <span class="parse-val">send IRA breakdown</span>
+                    </div>
+                    <div class="parse-row">
+                        <span class="parse-key">reminder_due</span>
+                        <span class="parse-val mono">2026-05-30</span>
+                    </div>
+                    <div class="parse-row">
+                        <span class="parse-key">context</span>
+                        <span class="parse-val">eldest overseas tuition · pressure point</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>Hermes parses · SQLite stores</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 5 — TODAY SCREEN
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>05</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 02 · Daily rhythm</span>
+                <h2 class="reveal">A <em>Today screen</em> that tells you who needs you, before you ask.</h2>
+            </div>
+
+            <div class="today-mock reveal">
+                <div class="today-greet">
+                    <span>Good morning. Here's where you stand.</span>
+                    <span class="date">TUE · 26 MAY 2026</span>
+                </div>
+
+                <div class="today-score">
+                    <div class="score-num">7</div>
+                    <div>
+                        <div class="score-label">Today's activity score</div>
+                        <p class="muted" style="font-size: var(--small-size); margin-top: 0.2em;">14-day garden · density tracks touchpoints logged</p>
+                    </div>
+                    <svg class="garden-svg" viewBox="0 0 420 80" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                        <!-- Each "bed" is a sparse flower cluster — denser = more touchpoints -->
+                        <g stroke="#C6A34F" stroke-width="0.8" fill="none" opacity="0.7">
+                            <!-- 14 columns of linework, varying density -->
+                            <!-- col 1 -->
+                            <g transform="translate(15,60)"><line x1="0" y1="0" x2="0" y2="-12"/><circle cx="0" cy="-14" r="1.5"/></g>
+                            <!-- col 2 -->
+                            <g transform="translate(45,60)"><line x1="0" y1="0" x2="-2" y2="-18"/><line x1="0" y1="0" x2="3" y2="-15"/><circle cx="-2" cy="-20" r="1.5"/><circle cx="3" cy="-17" r="1.5"/></g>
+                            <!-- col 3 -->
+                            <g transform="translate(75,60)"><line x1="0" y1="0" x2="0" y2="-10"/></g>
+                            <!-- col 4 -->
+                            <g transform="translate(105,60)"><line x1="0" y1="0" x2="-3" y2="-22"/><line x1="0" y1="0" x2="2" y2="-17"/><line x1="0" y1="0" x2="4" y2="-25"/><circle cx="-3" cy="-24" r="1.5"/><circle cx="2" cy="-19" r="1.5"/><circle cx="4" cy="-27" r="1.5"/></g>
+                            <!-- col 5 -->
+                            <g transform="translate(135,60)"><line x1="0" y1="0" x2="0" y2="-14"/><line x1="0" y1="0" x2="3" y2="-12"/><circle cx="0" cy="-16" r="1.5"/><circle cx="3" cy="-14" r="1.5"/></g>
+                            <!-- col 6 -->
+                            <g transform="translate(165,60)"><line x1="0" y1="0" x2="-2" y2="-18"/><line x1="0" y1="0" x2="2" y2="-21"/><line x1="0" y1="0" x2="4" y2="-15"/><circle cx="-2" cy="-20" r="1.5"/><circle cx="2" cy="-23" r="1.5"/><circle cx="4" cy="-17" r="1.5"/></g>
+                            <!-- col 7 -->
+                            <g transform="translate(195,60)"><line x1="0" y1="0" x2="0" y2="-8"/></g>
+                            <!-- col 8 -->
+                            <g transform="translate(225,60)"></g>
+                            <!-- col 9 -->
+                            <g transform="translate(255,60)"><line x1="0" y1="0" x2="0" y2="-16"/><line x1="0" y1="0" x2="-3" y2="-13"/><circle cx="0" cy="-18" r="1.5"/><circle cx="-3" cy="-15" r="1.5"/></g>
+                            <!-- col 10 -->
+                            <g transform="translate(285,60)"><line x1="0" y1="0" x2="0" y2="-12"/></g>
+                            <!-- col 11 -->
+                            <g transform="translate(315,60)"><line x1="0" y1="0" x2="-2" y2="-19"/><line x1="0" y1="0" x2="2" y2="-22"/><line x1="0" y1="0" x2="3" y2="-15"/><circle cx="-2" cy="-21" r="1.5"/><circle cx="2" cy="-24" r="1.5"/><circle cx="3" cy="-17" r="1.5"/></g>
+                            <!-- col 12 -->
+                            <g transform="translate(345,60)"><line x1="0" y1="0" x2="0" y2="-14"/><line x1="0" y1="0" x2="3" y2="-11"/><circle cx="0" cy="-16" r="1.5"/><circle cx="3" cy="-13" r="1.5"/></g>
+                            <!-- col 13 — today, dense + bright -->
+                            <g transform="translate(375,60)" stroke="#E2BC6A" opacity="1">
+                                <line x1="0" y1="0" x2="-4" y2="-26"/><line x1="0" y1="0" x2="0" y2="-30"/><line x1="0" y1="0" x2="4" y2="-22"/><line x1="0" y1="0" x2="-2" y2="-18"/>
+                                <circle cx="-4" cy="-28" r="2" fill="#E2BC6A"/><circle cx="0" cy="-32" r="2" fill="#E2BC6A"/><circle cx="4" cy="-24" r="2" fill="#E2BC6A"/><circle cx="-2" cy="-20" r="1.8" fill="#E2BC6A"/>
+                            </g>
+                            <!-- col 14 -->
+                            <g transform="translate(405,60)"><line x1="0" y1="0" x2="0" y2="-10"/></g>
+                            <!-- ground line -->
+                            <line x1="5" y1="62" x2="415" y2="62" stroke="#2A2A2A" stroke-width="0.5"/>
+                        </g>
+                    </svg>
+                </div>
+
+                <div class="today-sections">
+                    <div class="today-section">
+                        <span class="label gold">Due today</span>
+                        <ul>
+                            <li>David Tan · send IRA brief</li>
+                            <li>Lim Family · trust review</li>
+                            <li>Sarah Chen · nomination</li>
+                        </ul>
+                    </div>
+                    <div class="today-section">
+                        <span class="label">Relationship debt</span>
+                        <ul>
+                            <li>Marcus Wong · 94 days quiet</li>
+                            <li>Priya R. · last touch cool</li>
+                            <li>Hayden &amp; Olivia · stale</li>
+                        </ul>
+                    </div>
+                    <div class="today-section">
+                        <span class="label">Birthdays this week</span>
+                        <ul>
+                            <li>Joanna Tan · Wed</li>
+                            <li>Eric Lim · Fri</li>
+                            <li>Mrs. Khoo · Sat</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>AWMOS · Today</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 6 — MEETING PREP
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>06</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 03 · Meeting prep</span>
+                <h2 class="reveal">"<em>Prep me for David</em>" — and walk in already three steps ahead.</h2>
+            </div>
+
+            <ul class="bullet-list" style="max-width: 78ch; margin: 0 auto;">
+                <li class="reveal">
+                    <span class="num">→</span>
+                    <div>
+                        <strong>Full profile, recalled instantly</strong>
+                        <span class="desc">Household, policies, stage in the relationship, things he's mentioned. No scrolling back through chats.</span>
+                    </div>
+                </li>
+                <li class="reveal">
+                    <span class="num">→</span>
+                    <div>
+                        <strong>The last three touchpoints, summarised</strong>
+                        <span class="desc">What was discussed, what was decided, what's pending. With the sentiment in the room.</span>
+                    </div>
+                </li>
+                <li class="reveal">
+                    <span class="num">→</span>
+                    <div>
+                        <strong>Pending reminders &amp; policy gaps</strong>
+                        <span class="desc">Annual review overdue? Nomination missing? Renewal next quarter? Flagged before he asks.</span>
+                    </div>
+                </li>
+                <li class="reveal">
+                    <span class="num">→</span>
+                    <div>
+                        <strong>Three to five suggested questions</strong>
+                        <span class="desc">Drawn from his situation, not a generic discovery template.</span>
+                    </div>
+                </li>
+                <li class="reveal">
+                    <span class="num">→</span>
+                    <div>
+                        <strong>Likely objections &amp; a follow-up agenda skeleton</strong>
+                        <span class="desc">A starting frame, ready before the cappuccino arrives.</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        <div class="wordmark"><span class="dot"></span>Preparation is a quiet competitive edge</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 7 — POST-MEETING CAPTURE
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>07</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 04 · Capture, again</span>
+                <h2 class="reveal">After the meeting — speak it once, never type it twice.</h2>
+            </div>
+
+            <div class="two-col" style="margin-top: clamp(0.5rem, 1.5vw, 1.5rem);">
+                <div class="reveal">
+                    <div class="tg-mock">
+                        <div class="tg-header">
+                            <span><span class="dot">●</span>Voice memo · transcribed</span>
+                            <span>16:48</span>
+                        </div>
+                        <div class="tg-msg">
+                            <span class="from">You · dictated walking back to the car</span>
+                            "Just met with the Lims. They've decided to consolidate the children's plans, want a proposal by mid-June. Emotional about the eldest leaving — note that. Joanna mentioned her sister might be looking too. Schedule trust review for late July."
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="bullet-list reveal">
+                    <li>
+                        <span class="num">↳</span>
+                        <div>
+                            <strong>Contact updated</strong>
+                            <span class="desc">The Lim family record gets new context — eldest leaving, emotional sensitivity flagged for next meeting.</span>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="num">↳</span>
+                        <div>
+                            <strong>Touchpoint logged</strong>
+                            <span class="desc">Sentiment, topics, decisions, what was promised — all extracted.</span>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="num">↳</span>
+                        <div>
+                            <strong>Reminders fanned out</strong>
+                            <span class="desc">Proposal for mid-June. Trust review for late July. Possible referral: Joanna's sister.</span>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="num">↳</span>
+                        <div>
+                            <strong>Next appointment timing surfaced</strong>
+                            <span class="desc">Reasonable cadence based on context, not a default rule.</span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>One voice memo · four structured outcomes</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 8 — RELATIONSHIP INTELLIGENCE
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>08</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 05 · Intelligence</span>
+                <h2 class="reveal">The system watches what you can't — and tells you who's drifting.</h2>
+            </div>
+
+            <div class="grid-4">
+                <div class="intel-card at-risk reveal">
+                    <span class="label">At risk</span>
+                    <h3>Relationships fading</h3>
+                    <p>Touch cadence dropping. Last sentiment cool. Decisions made elsewhere.</p>
+                </div>
+                <div class="intel-card unfollowed reveal">
+                    <span class="label">Unfollowed</span>
+                    <h3>Promises forgotten</h3>
+                    <p>Action items you committed to that haven't been closed out.</p>
+                </div>
+                <div class="intel-card cooling reveal">
+                    <span class="label">Cooling</span>
+                    <h3>Quiet contacts</h3>
+                    <p>Active prospects gone silent. Warm clients you've drifted from.</p>
+                </div>
+                <div class="intel-card ripe reveal">
+                    <span class="label">Ripe</span>
+                    <h3>Ready to reach</h3>
+                    <p>Right cadence, positive last sentiment, signal aligned. Reach out now.</p>
+                </div>
+            </div>
+
+            <p class="muted reveal" style="text-align: center; margin-top: clamp(1.2rem, 2.5vw, 2rem); max-width: 64ch; margin-left: auto; margin-right: auto; line-height: 1.6; font-size: var(--small-size);">
+                <em>Not a score, not a leaderboard.</em> A quiet shortlist of who deserves your attention this week, ordered by signal — not by squeaky-wheel.
+            </p>
+        </div>
+        <div class="wordmark"><span class="dot"></span>Calibrated by cadence &amp; sentiment</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 9 — NETWORK GRAPH (inline SVG)
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>09</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 06 · Network</span>
+                <h2 class="reveal">See the whole web — families, referrers, the shape of the book.</h2>
+            </div>
+
+            <div class="graph-wrap">
+                <svg class="graph-svg reveal" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid meet" aria-label="Network graph visualization">
+                    <!-- Edges first, so nodes draw on top -->
+                    <g stroke-width="1.2" fill="none">
+                        <!-- Family edges (gold) -->
+                        <line x1="180" y1="180" x2="240" y2="140" stroke="#C6A34F" class="draw-line" stroke-dasharray="200" style="transition-delay: 0.4s;"/>
+                        <line x1="180" y1="180" x2="240" y2="220" stroke="#C6A34F" class="draw-line" style="transition-delay: 0.5s;"/>
+                        <line x1="380" y1="120" x2="440" y2="80" stroke="#C6A34F" class="draw-line" style="transition-delay: 0.6s;"/>
+                        <!-- Referral edges (cream-warm) -->
+                        <line x1="100" y1="80" x2="180" y2="180" stroke="#7A8F62" class="draw-line" stroke-dasharray="200" style="transition-delay: 0.7s;"/>
+                        <line x1="100" y1="80" x2="240" y2="140" stroke="#7A8F62" class="draw-line" style="transition-delay: 0.8s;"/>
+                        <line x1="100" y1="80" x2="380" y2="120" stroke="#7A8F62" class="draw-line" style="transition-delay: 0.85s;"/>
+                        <!-- Friend edges (muted) -->
+                        <line x1="240" y1="220" x2="350" y2="280" stroke="#8F7B4A" class="draw-line" stroke-dasharray="200" style="transition-delay: 0.9s;"/>
+                        <line x1="350" y1="280" x2="450" y2="240" stroke="#8F7B4A" class="draw-line" style="transition-delay: 0.95s;"/>
+                        <line x1="380" y1="120" x2="450" y2="240" stroke="#8F7B4A" class="draw-line" style="transition-delay: 1s;"/>
+                        <!-- More referral threads -->
+                        <line x1="510" y1="340" x2="450" y2="240" stroke="#7A8F62" class="draw-line" style="transition-delay: 1.05s;"/>
+                        <line x1="510" y1="340" x2="350" y2="280" stroke="#7A8F62" class="draw-line" style="transition-delay: 1.1s;"/>
+                    </g>
+
+                    <!-- Ghost referrer hubs (dashed outline, no fill) -->
+                    <g>
+                        <circle cx="100" cy="80" r="22" fill="#0E0E0E" stroke="#6F6F6F" stroke-width="1" stroke-dasharray="3 3"/>
+                        <text x="100" y="120" text-anchor="middle" font-family="Barlow Condensed" font-size="9" fill="#A6A6A6" letter-spacing="1.5">ABC IMMIGRATION</text>
+
+                        <circle cx="510" cy="340" r="22" fill="#0E0E0E" stroke="#6F6F6F" stroke-width="1" stroke-dasharray="3 3"/>
+                        <text x="510" y="378" text-anchor="middle" font-family="Barlow Condensed" font-size="9" fill="#A6A6A6" letter-spacing="1.5">SG GOLF CLUB</text>
+                    </g>
+
+                    <!-- Client nodes (gold) -->
+                    <g>
+                        <circle cx="180" cy="180" r="14" fill="#C6A34F" stroke="#E2BC6A" stroke-width="1.5"/>
+                        <text x="180" y="210" text-anchor="middle" font-family="Cormorant Garamond" font-size="13" fill="#F5F1E8" font-style="italic">David Tan</text>
+
+                        <circle cx="240" cy="140" r="10" fill="#C6A34F" stroke="#E2BC6A" stroke-width="1.5"/>
+                        <text x="240" y="125" text-anchor="middle" font-family="Cormorant Garamond" font-size="11" fill="#D8D0C3" font-style="italic">Joanna</text>
+
+                        <circle cx="240" cy="220" r="10" fill="#C6A34F" stroke="#E2BC6A" stroke-width="1.5"/>
+                        <text x="240" y="248" text-anchor="middle" font-family="Cormorant Garamond" font-size="11" fill="#D8D0C3" font-style="italic">Hayden</text>
+
+                        <circle cx="380" cy="120" r="14" fill="#C6A34F" stroke="#E2BC6A" stroke-width="1.5"/>
+                        <text x="380" y="100" text-anchor="middle" font-family="Cormorant Garamond" font-size="13" fill="#F5F1E8" font-style="italic">Lim Family</text>
+
+                        <circle cx="440" cy="80" r="9" fill="#C6A34F" stroke="#E2BC6A" stroke-width="1.5"/>
+                        <text x="440" y="65" text-anchor="middle" font-family="Cormorant Garamond" font-size="10" fill="#D8D0C3" font-style="italic">Eldest</text>
+                    </g>
+
+                    <!-- Prospect nodes (cream outline) -->
+                    <g>
+                        <circle cx="350" cy="280" r="11" fill="#0E0E0E" stroke="#D8D0C3" stroke-width="1.5"/>
+                        <text x="350" y="305" text-anchor="middle" font-family="Cormorant Garamond" font-size="12" fill="#D8D0C3" font-style="italic">Sarah Chen</text>
+
+                        <circle cx="450" cy="240" r="11" fill="#0E0E0E" stroke="#D8D0C3" stroke-width="1.5"/>
+                        <text x="450" y="265" text-anchor="middle" font-family="Cormorant Garamond" font-size="12" fill="#D8D0C3" font-style="italic">Marcus W.</text>
+                    </g>
+                </svg>
+
+                <div class="graph-legend reveal">
+                    <span class="label gold">Legend</span>
+                    <div class="legend-row"><span class="swatch" style="background: #C6A34F;"></span><span>Client (active)</span></div>
+                    <div class="legend-row"><span class="swatch" style="background: transparent;"></span><span>Prospect</span></div>
+                    <div class="legend-row"><span class="swatch" style="background: transparent; border-style: dashed;"></span><span>External referrer (ghost)</span></div>
+                    <div style="height: 0.6rem;"></div>
+                    <div class="legend-row"><span class="edge" style="background: #C6A34F;"></span><span>Family tie</span></div>
+                    <div class="legend-row"><span class="edge" style="background: #7A8F62;"></span><span>Referral</span></div>
+                    <div class="legend-row"><span class="edge" style="background: #8F7B4A;"></span><span>Friend / peer</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>Obsidian-style force-directed view · /graph</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 10 — REMINDERS (Kanban)
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>10</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Capability 07 · Reminders</span>
+                <h2 class="reveal">Reminders that actually fire — and stay out of your way.</h2>
+            </div>
+
+            <div class="kanban">
+                <div class="kanban-col due reveal">
+                    <span class="label">Due today <span class="count">3</span></span>
+                    <div class="kanban-card gold-card">
+                        David Tan · IRA breakdown
+                        <span class="meta">2026-05-26 · annual review</span>
+                    </div>
+                    <div class="kanban-card gold-card">
+                        Lim Family · trust review
+                        <span class="meta">2026-05-26 · policy</span>
+                    </div>
+                    <div class="kanban-card gold-card">
+                        Sarah Chen · nomination
+                        <span class="meta">2026-05-26 · regulatory</span>
+                    </div>
+                </div>
+
+                <div class="kanban-col reveal">
+                    <span class="label">Pending <span class="count">12</span></span>
+                    <div class="kanban-card">Marcus Wong · 90-day check-in<span class="meta">2026-06-02</span></div>
+                    <div class="kanban-card">Priya R. · renewal<span class="meta">2026-06-14</span></div>
+                    <div class="kanban-card">Hayden &amp; Olivia · review<span class="meta">2026-06-21</span></div>
+                    <div class="kanban-card">Joanna Tan · birthday<span class="meta">2026-05-28</span></div>
+                </div>
+
+                <div class="kanban-col reveal">
+                    <span class="label">Snoozed <span class="count">5</span></span>
+                    <div class="kanban-card">Eric Lim · re-engage<span class="meta">until 2026-07-01</span></div>
+                    <div class="kanban-card">Mrs. Khoo · estate doc<span class="meta">until 2026-07-15</span></div>
+                </div>
+
+                <div class="kanban-col reveal">
+                    <span class="label">Done <span class="count">38</span></span>
+                    <div class="kanban-card" style="opacity: 0.55;">Tan Family · proposal sent<span class="meta">2026-05-20</span></div>
+                    <div class="kanban-card" style="opacity: 0.55;">Daniel L. · renewal<span class="meta">2026-05-18</span></div>
+                    <div class="kanban-card" style="opacity: 0.55;">A. Goh · birthday<span class="meta">2026-05-15</span></div>
+                </div>
+            </div>
+
+            <p class="muted reveal" style="text-align: center; margin-top: clamp(1rem, 2vw, 1.6rem); max-width: 64ch; margin-left: auto; margin-right: auto; line-height: 1.6; font-size: var(--small-size);">
+                Annual reviews · policy anniversaries · nominations · renewals · custom follow-ups from any meeting.
+            </p>
+        </div>
+        <div class="wordmark"><span class="dot"></span>AWMOS · Reminders</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 11 — PRIVATE BY DESIGN
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>11</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Disposition · Private by design</span>
+                <h2 class="reveal">A tool that is yours — not the platform's.</h2>
+            </div>
+
+            <div class="does-not">
+                <div class="does-col reveal-x">
+                    <h3>What it is</h3>
+                    <ul>
+                        <li>Local-only SQLite database on your Mac</li>
+                        <li>No cloud sync, no telemetry, no auth bureaucracy</li>
+                        <li>One database per laptop · your data, your file</li>
+                        <li>Source-of-truth for memory, prep, and follow-through</li>
+                        <li>Built to survive PDF export, screenshots, printing</li>
+                    </ul>
+                </div>
+                <div class="does-col not reveal-x">
+                    <h3>What it is not</h3>
+                    <ul>
+                        <li>Not a tool that sends client-facing messages</li>
+                        <li>Not a WhatsApp / SMS / email broadcast drafter</li>
+                        <li>Not a system of record · official platforms still own that</li>
+                        <li>Not compliance-approved · not making that claim</li>
+                        <li>Not a sales pipeline tracker · this is about relationships</li>
+                    </ul>
+                </div>
+            </div>
+
+            <p class="muted reveal" style="text-align: center; margin-top: clamp(1.2rem, 2.5vw, 2rem); max-width: 62ch; margin-left: auto; margin-right: auto; line-height: 1.6; font-size: var(--small-size); font-style: italic;">
+                A private operating aid. Quiet, considered, kept inside your laptop where it belongs.
+            </p>
+        </div>
+        <div class="wordmark"><span class="dot"></span>Private aid · not a CRM, not a broadcast tool</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 12 — TWO SURFACES, ONE BRAIN
+         ==================================================== -->
+    <section class="slide">
+        <div class="slide-num"><span>12</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="label reveal">Architecture · One brain</span>
+                <h2 class="reveal">Two surfaces. One SQLite. Always in sync.</h2>
+            </div>
+
+            <div class="arch-diagram">
+                <div class="arch-node reveal">
+                    <span class="label gold">Surface 01 · On the go</span>
+                    <h3>Telegram</h3>
+                    <p>Natural language in. Hermes AI parses, validates, and writes. Voice memos. Quick captures between meetings.</p>
+                </div>
+
+                <div class="arch-connector reveal">
+                    <span class="line"></span>
+                    <span style="font-family: var(--font-mono); font-size: var(--label-size);">↘ ↙</span>
+                    <span style="font-size: var(--label-size); letter-spacing: 0.18em;">SHARED</span>
+                    <span style="font-family: var(--font-mono); font-size: var(--label-size);">↗ ↖</span>
+                    <span class="line"></span>
+                </div>
+
+                <div class="arch-node reveal">
+                    <span class="label gold">Surface 02 · At the laptop</span>
+                    <h3>AWMOS Desktop</h3>
+                    <p>Native macOS app. Today screen, contact detail, timeline, graph, reminders, generated documents.</p>
+                </div>
+            </div>
+
+            <div class="arch-node center reveal" style="max-width: 60%; margin: clamp(1rem, 2vw, 1.8rem) auto 0;">
+                <span class="label gold">Shared brain</span>
+                <h3 style="margin-top: 0.4rem;">SQLite · WAL mode</h3>
+                <p>One database file. Both surfaces read and write directly. Concurrent access handled natively. No cloud, no merge logic, no sync conflicts.</p>
+            </div>
+
+            <div class="arch-bottom reveal">
+                <span class="mono">~/data/relationship_os.sqlite3</span>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>The data is the product</div>
+    </section>
+
+    <!-- ====================================================
+         SLIDE 13 — CLOSING
+         ==================================================== -->
+    <section class="slide closing-slide">
+        <div class="slide-num"><span>13</span><span class="sep">/</span><span>13</span></div>
+        <div class="slide-content">
+            <span class="label reveal" style="display: block; margin-bottom: clamp(1rem, 2vw, 1.5rem);">In closing</span>
+            <h1 class="reveal">Your relationships, <em>remembered</em>.</h1>
+            <div class="gold-rule reveal" style="margin-left: auto; margin-right: auto;"></div>
+            <p class="sub reveal">
+                Quiet, disciplined, premium. Built for consultants who treat their book as a craft — and want their tools to feel the same way.
+            </p>
+            <div class="closing-tag reveal">
+                <span>Capture</span>
+                <span>Structure</span>
+                <span>Remember</span>
+            </div>
+        </div>
+        <div class="wordmark"><span class="dot"></span>AWM Relationship OS</div>
+    </section>
+
+    <script>
+        /* ===========================================
+           SLIDE PRESENTATION CONTROLLER
+           Keyboard, touch, scroll, intersection-observer.
+           =========================================== */
+        class SlidePresentation {
+            constructor() {
+                this.slides = document.querySelectorAll('.slide');
+                this.currentSlide = 0;
+                this.progressBar = document.getElementById('progressBar');
+                this.navDotsContainer = document.getElementById('navDots');
+                this.setupIntersectionObserver();
+                this.setupKeyboardNav();
+                this.setupTouchNav();
+                this.setupProgressBar();
+                this.setupNavDots();
+            }
+
+            setupIntersectionObserver() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                            entry.target.classList.add('visible');
+                            const idx = Array.from(this.slides).indexOf(entry.target);
+                            this.currentSlide = idx;
+                            this.updateNavDots();
+                        }
+                    });
+                }, { threshold: [0.5] });
+
+                this.slides.forEach(s => observer.observe(s));
+            }
+
+            setupKeyboardNav() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                        e.preventDefault();
+                        this.goTo(this.currentSlide + 1);
+                    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                        e.preventDefault();
+                        this.goTo(this.currentSlide - 1);
+                    } else if (e.key === 'Home') {
+                        e.preventDefault();
+                        this.goTo(0);
+                    } else if (e.key === 'End') {
+                        e.preventDefault();
+                        this.goTo(this.slides.length - 1);
+                    }
+                });
+            }
+
+            setupTouchNav() {
+                let touchStartY = 0;
+                document.addEventListener('touchstart', (e) => {
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+                document.addEventListener('touchend', (e) => {
+                    const dy = touchStartY - e.changedTouches[0].clientY;
+                    if (Math.abs(dy) > 60) {
+                        this.goTo(this.currentSlide + (dy > 0 ? 1 : -1));
+                    }
+                }, { passive: true });
+            }
+
+            setupProgressBar() {
+                window.addEventListener('scroll', () => {
+                    const scrollMax = document.documentElement.scrollHeight - window.innerHeight;
+                    const pct = scrollMax > 0 ? (window.scrollY / scrollMax) * 100 : 0;
+                    this.progressBar.style.width = pct + '%';
+                });
+            }
+
+            setupNavDots() {
+                // Always clear first — guards against duplicate dots if outerHTML
+                // was captured after dots were rendered (export-safe).
+                this.navDotsContainer.innerHTML = '';
+                this.slides.forEach((_, i) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+                    btn.setAttribute('aria-label', `Go to slide ${i + 1}`);
+                    btn.addEventListener('click', () => this.goTo(i));
+                    this.navDotsContainer.appendChild(btn);
+                });
+            }
+
+            updateNavDots() {
+                this.navDotsContainer.querySelectorAll('.nav-dot').forEach((d, i) => {
+                    d.classList.toggle('active', i === this.currentSlide);
+                });
+            }
+
+            goTo(idx) {
+                idx = Math.max(0, Math.min(this.slides.length - 1, idx));
+                this.slides[idx].scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Initialize once DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => new SlidePresentation());
+        } else {
+            new SlidePresentation();
+        }
+
+        // Mark the first slide visible immediately so reveals fire on load
+        window.addEventListener('load', () => {
+            document.querySelector('.slide').classList.add('visible');
+        });
+    </script>
+</body>
+</html>

@@ -41,7 +41,7 @@ export function FirstRunRoute({ initialError, onResolved }: FirstRunProps) {
       <div className="w-full max-w-xl">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-4 w-4 text-gold" />
-          <span className="awm-label">AWMOS</span>
+          <span className="awm-label">Cronos</span>
         </div>
         <h1 className="font-display text-4xl font-light text-fg leading-tight">
           Locate your kit folder

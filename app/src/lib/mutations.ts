@@ -98,6 +98,50 @@ export async function updateContact(
   };
 }
 
+export interface TouchpointEdits {
+  date?: string;
+  type?: string;
+  sentiment?: string;
+  summary?: string;
+  topics?: string;
+  action_items?: string;
+}
+
+/**
+ * Update the editable content fields of an existing touchpoint.
+ * `created_at` is never modified — the original log time is preserved.
+ */
+export async function updateTouchpoint(
+  id: string,
+  edits: TouchpointEdits
+): Promise<void> {
+  const cleanId = id.trim();
+  if (!cleanId) throw new Error("Missing touchpoint id.");
+
+  const setClauses: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (edits.date !== undefined)         { setClauses.push(`"date" = $${idx++}`);         params.push(edits.date); }
+  if (edits.type !== undefined)         { setClauses.push(`"type" = $${idx++}`);         params.push(edits.type); }
+  if (edits.sentiment !== undefined)    { setClauses.push(`"sentiment" = $${idx++}`);    params.push(edits.sentiment); }
+  if (edits.summary !== undefined)      { setClauses.push(`"summary" = $${idx++}`);      params.push(edits.summary); }
+  if (edits.topics !== undefined)       { setClauses.push(`"topics" = $${idx++}`);       params.push(edits.topics); }
+  if (edits.action_items !== undefined) { setClauses.push(`"action_items" = $${idx++}`); params.push(edits.action_items); }
+
+  if (setClauses.length === 0) return;
+  params.push(cleanId);
+
+  const db = await getDb();
+  const result = await db.execute(
+    `UPDATE touchpoints SET ${setClauses.join(", ")} WHERE id = $${idx}`,
+    params
+  );
+  if (result.rowsAffected === 0) {
+    throw new Error(`Touchpoint ${cleanId} not found.`);
+  }
+}
+
 export async function updateTouchpointNotes(
   id: string,
   notes: string
